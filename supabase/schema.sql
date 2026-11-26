@@ -55,6 +55,8 @@ create function public.my_role() returns text
 language sql stable security definer set search_path = public as
 $$ select role from public.profiles where id = auth.uid() $$;
 
+-- Helper functions must not be callable by anonymous visitors (applied after both are created, below)
+
 -- Auto-create a profile (role = student) for every new user
 create function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -64,6 +66,10 @@ begin
 end $$;
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
+
+revoke execute on function public.my_role() from public, anon;
+grant execute on function public.my_role() to authenticated;
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 -- Row Level Security
 alter table public.profiles enable row level security;
