@@ -24,6 +24,7 @@ export default function Quizzes() {
   const [chap, setChap] = useState<Record<string, string>>({});
   const chapters = useChapters();
   const [formKey, setFormKey] = useState(0);
+  const [count, setCount] = useState(8);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string }[]>([]);
   const [err, setErr] = useState("");
@@ -49,7 +50,7 @@ export default function Quizzes() {
         const files = (fd.getAll("photos_" + s) as File[]).filter((x) => x.size);
         if (files.length) photos[s] = await Promise.all(files.map((x) => uploadFile(x, "sources")));
       }
-      const res = await fetch("/api/quiz/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topics, chapters: chap, photos }) });
+      const res = await fetch("/api/quiz/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topics, chapters: chap, photos, count }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "Something went wrong");
       setMsg(j.results.map((r: { subject: string; ok: boolean; count?: number; error?: string }) => ({ ok: r.ok, text: r.ok ? `${r.subject}: ${r.count} questions ready for review` : `${r.subject}: ${r.error}` })));
@@ -82,6 +83,9 @@ export default function Quizzes() {
               <FileInput name={"photos_" + s} multiple compact disabled={busy} label="Or upload photos / PDF of the pages" />
             </div>
           ))}
+          <label className="flex items-center gap-2 text-sm font-extrabold">Questions in each quiz
+            <select value={count} onChange={(e) => setCount(Number(e.target.value))} disabled={busy} className="field !w-auto !py-1.5">{[4, 5, 6, 8, 10, 12, 15].map((n) => <option key={n} value={n}>{n}</option>)}</select>
+            <span className="text-xs font-semibold text-slate-500">(you can add more later)</span></label>
           <button disabled={busy} className="btn btn-primary btn-big">{busy ? "🪄 Making quizzes… (about a minute)" : "🪄 Create quizzes"}</button>
           {err && <ErrorBox>{err}</ErrorBox>}
           {msg.map((m, i) => <p key={i} className={`text-sm font-bold ${m.ok ? "text-emerald-700" : "text-rose-600"}`}>{m.ok ? "✓" : "✗"} {m.text}</p>)}

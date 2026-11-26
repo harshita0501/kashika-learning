@@ -6,17 +6,17 @@ import { loadSource } from "@/lib/book-source";
 import { SUBJECTS } from "@/lib/constants";
 
 export const maxDuration = 120;
-const COUNT = 8;
 
 export async function POST(req: Request) {
   const supabase = await teacherClient();
   if (!supabase) return NextResponse.json({ error: "Only ma'am can create quizzes." }, { status: 403 });
   if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "ANTHROPIC_API_KEY is not set on the server." }, { status: 500 });
 
-  const body = (await req.json().catch(() => ({}))) as { topics?: Record<string, string>; chapters?: Record<string, string>; photos?: Record<string, string[]> };
+  const body = (await req.json().catch(() => ({}))) as { topics?: Record<string, string>; chapters?: Record<string, string>; photos?: Record<string, string[]>; count?: number };
   const jobs = SUBJECTS.filter((s) => body.topics?.[s]?.trim() || body.chapters?.[s] || body.photos?.[s]?.length).map((s) => ({ subject: s, topic: (body.topics?.[s] ?? "").trim().slice(0, 200), chapter: body.chapters?.[s] || null, photos: (body.photos?.[s] ?? []).slice(0, 12) }));
   if (!jobs.length) return NextResponse.json({ error: "Please enter a topic, pick a book chapter, or upload photos for at least one subject." }, { status: 400 });
 
+  const COUNT = Math.max(3, Math.min(15, Math.round(Number(body.count) || 8)));
   const week = weekStart();
   const results = await Promise.all(
     jobs.map(async (j) => {

@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useMe } from "@/lib/session";
 import { Confetti, ErrorBox, Ring } from "@/components/ui";
 import { useTodo } from "@/lib/todo";
+import AddMore from "@/components/AddMore";
 
 type Card = { id: string; position: number; word: string; emoji: string; meaning: string; example: string; hindi: string };
 type SetRow = { id: string; topic: string; status: "draft" | "assigned" };
@@ -100,6 +101,7 @@ export default function Deck() {
           </div>
         )}
         {err && <ErrorBox>{err}</ErrorBox>}
+        {isTeacher && <AddMore what="cards" endpoint="/api/flashcards/add" body={{ set_id: id }} options={[1, 2, 3, 4, 5, 6, 8, 10]} defaultCount={2} onDone={load} />}
         <div className="grid sm:grid-cols-2 gap-3">
           {cards.map((c, i) => (
             <article key={c.id} className="card overflow-hidden fade-up" style={{ animationDelay: `${i * 0.04}s` }}>

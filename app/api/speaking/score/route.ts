@@ -18,18 +18,20 @@ export async function POST(req: Request) {
   if (!task) return NextResponse.json({ error: "Task not found." }, { status: 404 });
 
   let ai_score: number | null = null;
+  let mistakes: unknown[] = [];
   let ai_feedback = "Ma'am will listen to your recording and give you marks. Well done for speaking!";
   if (transcript && process.env.ANTHROPIC_API_KEY) {
     try {
       const r = await scoreSpeech(task, transcript);
       ai_score = r.score;
       ai_feedback = r.feedback;
+      mistakes = r.mistakes;
     } catch {
       ai_feedback = "Ma'am will listen to your recording and give you marks. Well done for speaking!";
     }
   }
   const { data, error } = await supabase.from("speaking_attempts")
-    .insert({ task_id: task.id, audio_path, transcript, ai_score, ai_feedback }).select("*").single();
+    .insert({ task_id: task.id, audio_path, transcript, ai_score, ai_feedback, mistakes }).select("*").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ attempt: data });
 }

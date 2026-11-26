@@ -15,7 +15,14 @@ const TaskSchema = z.object({
   hint: z.string(), // a sentence starter or tip, e.g. "I like ... because ...". May be ""
 });
 const GenOut = z.object({ topic: z.string(), tasks: z.array(TaskSchema) });
-const ScoreOut = z.object({ score: z.number(), feedback: z.string() });
+const Mistake = z.object({
+  category: z.enum(["article", "preposition", "tense", "plural", "verb_agreement", "missing_word", "word_order", "word_choice", "pronunciation", "other"]),
+  said: z.string(), // the exact words she said that are wrong (short phrase)
+  better: z.string(), // the corrected phrase
+  why: z.string(), // one very short, kind reason in simple English
+});
+const ScoreOut = z.object({ score: z.number(), feedback: z.string(), mistakes: z.array(Mistake) });
+export type SpeakMistake = z.infer<typeof Mistake>;
 
 const GEN_SYSTEM = `You design short spoken-English practice for Kashika, a Class 3 student (age 8-9) in India who is learning English.
 Make speaking tasks she can do by recording a voice note of 5-20 seconds.
@@ -24,14 +31,23 @@ Task kinds:
 - answer: a simple question about her life or the topic; she answers in 1-2 full sentences. target = "".
 - describe: she describes a thing, animal, place or routine in 2-3 sentences. target = "".
 Rules: friendly tone; very simple words; no tongue-twisters that are too hard; nothing sensitive. hint = a short sentence starter such as "My favourite animal is ... because ..." (or "" for repeat).
-Mix kinds: for 4 tasks use 2 repeat, 1 answer, 1 describe. If no topic is given, pick a fun everyday topic (family, school, food, animals, festival, weather ...) and return it in "topic".`;
+Mix kinds: roughly half repeat, the rest answer and describe (for 4 tasks: 2 repeat, 1 answer, 1 describe). If no topic is given, pick a fun everyday topic (family, school, food, animals, festival, weather ...) and return it in "topic".`;
 
-const SCORE_SYSTEM = `You are a kind English speaking coach for Kashika, a Class 3 student (age 8-9) in India. You get the task and an automatic transcript of her voice note.
-The transcript comes from speech recognition, so small spelling slips, missing capital letters or punctuation are NOT her fault - ignore them, and be generous when a word could be a mishearing of an Indian accent.
-Give a score from 0 to 5 (whole numbers):
+const SCORE_SYSTEM = `You are a kind but careful English speaking coach for Kashika, a Class 3 student (age 8-9) in India. You get the task and an automatic transcript of her voice note.
+The transcript comes from speech recognition: ignore capital letters, punctuation and spelling slips, and be generous when a word may be an accent-related mishearing.
+
+SCORE (whole number 0-5):
 - repeat tasks: compare with the target sentence. 5 = all or nearly all words right in order; 4 = one small slip; 3 = about half right; 2 = a few words; 1 = barely related; 0 = nothing/unrelated.
-- answer/describe tasks: 5 = relevant, clear full sentence(s), good grammar for Class 3; 4 = relevant with a small grammar slip; 3 = relevant but very short or several slips; 2 = partly relevant or single words; 1 = barely related; 0 = nothing/unrelated.
-feedback: 1-2 short, warm sentences written TO Kashika in very simple English: start with something she did well, then exactly one tip (e.g. a word to practise or a better sentence). No long lists, no jargon.`;
+- answer/describe tasks: 5 = relevant, clear full sentence(s), correct grammar for Class 3; 4 = relevant with one small grammar slip; 3 = relevant but very short or several slips; 2 = partly relevant or single words; 1 = barely related; 0 = nothing/unrelated. Each real grammar mistake lowers the score; do not give 5 if there is a clear mistake.
+
+MISTAKES (this is the most important part - look carefully, sentence by sentence, and list every real mistake, at most 4, most important first):
+- article: a missing or wrong a / an / the ("I saw dog" -> "I saw a dog"; "a elephant" -> "an elephant").
+- preposition: missing or wrong in / on / at / to / of / with / from ("I go school" -> "I go to school"; "sit in the chair" -> "sit on the chair").
+- tense, plural ("two dog" -> "two dogs"), verb_agreement ("he play" -> "he plays", "they is" -> "they are"), missing_word (any other word that is left out, e.g. "I am happy" not "I happy"), word_order, word_choice, pronunciation (only for a word in a repeat task that was clearly said as a different word, e.g. "tree" for "three"), or other.
+For each mistake give: said = the exact wrong words she said (short), better = the corrected words, why = one very short kind reason in simple English (e.g. "We say 'a' before one dog."). Never list a mistake that is only capitalisation, punctuation or an obvious speech-recognition slip. If there are no real mistakes, return an empty list.
+For a repeat task, compare with the target: a missing or changed word (including a / the / in / on / of) counts as a mistake with category missing_word / article / preposition / pronunciation as fits.
+
+FEEDBACK: 1-2 short, warm sentences TO Kashika in very simple English: first something she did well, then the single most useful tip. Do not repeat the whole mistakes list here.`;
 
 function client() { return new Anthropic(); }
 
@@ -51,15 +67,19 @@ export async function generateTasks(topic: string, count: number, avoid: string[
   return { topic: res.parsed_output.topic.trim() || topic.trim(), tasks };
 }
 
-export async function scoreSpeech(task: { kind: Kind; prompt: string; target: string }, transcript: string): Promise<{ score: number; feedback: string }> {
+export async function scoreSpeech(task: { kind: Kind; prompt: string; target: string }, transcript: string): Promise<{ score: number; feedback: string; mistakes: SpeakMistake[] }> {
   const user = `Task type: ${task.kind}\nTask: ${task.prompt}\n${task.kind === "repeat" ? `Target sentence: ${task.target}\n` : ""}Transcript of Kashika's voice note: "${transcript}"`;
   const res = await client().beta.messages.parse({
-    model: MODEL, max_tokens: 1500, system: SCORE_SYSTEM,
+    model: MODEL, max_tokens: 3000, system: SCORE_SYSTEM,
     betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
-    output_config: { effort: "low", format: zodOutputFormat(ScoreOut) },
+    output_config: { effort: "medium", format: zodOutputFormat(ScoreOut) },
     messages: [{ role: "user", content: user }],
   });
   if (res.stop_reason === "refusal" || !res.parsed_output) throw new Error("The AI could not check this recording.");
   const score = Math.max(0, Math.min(5, Math.round(res.parsed_output.score)));
-  return { score, feedback: res.parsed_output.feedback.trim() };
+  const mistakes = res.parsed_output.mistakes
+    .map((m) => ({ ...m, said: m.said.trim(), better: m.better.trim(), why: m.why.trim() }))
+    .filter((m) => m.said && m.better && m.said.toLowerCase() !== m.better.toLowerCase())
+    .slice(0, 4);
+  return { score, feedback: res.parsed_output.feedback.trim(), mistakes };
 }

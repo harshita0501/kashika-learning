@@ -21,6 +21,7 @@ export default function Speaking() {
   const [atts, setAtts] = useState<Att[]>([]);
   const [topic, setTopic] = useState("");
   const [chapter, setChapter] = useState("");
+  const [count, setCount] = useState(4);
   const chapters = useChapters();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -41,7 +42,7 @@ export default function Speaking() {
     try {
       const files = ((new FormData(e.currentTarget as HTMLFormElement)).getAll("photos") as File[]).filter((x) => x.size);
       const photos = await Promise.all(files.map((x) => uploadFile(x, "sources")));
-      const res = await fetch("/api/speaking/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic, chapter_id: chapter || undefined, photos }) });
+      const res = await fetch("/api/speaking/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic, chapter_id: chapter || undefined, photos, count }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "Something went wrong");
       todo.refresh(); router.push(`/speaking/${j.id}`);
@@ -70,6 +71,8 @@ export default function Speaking() {
           <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Topic (optional)" className="field" disabled={busy} />
           <ChapterSelect chapters={chapters} subject="English" value={chapter} onChange={setChapter} disabled={busy} />
           <FileInput name="photos" multiple compact disabled={busy} label="Or upload photos / PDF of the pages" />
+          <label className="flex items-center gap-2 text-sm font-extrabold">How many tasks
+            <select value={count} onChange={(e) => setCount(Number(e.target.value))} disabled={busy} className="field !w-auto !py-1.5">{[2, 3, 4, 5, 6, 8].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
           <button disabled={busy} className="btn btn-primary btn-big">{busy ? "🪄 Making tasks…" : "🪄 Create speaking tasks"}</button>
           {err && <ErrorBox>{err}</ErrorBox>}
         </form>

@@ -8,6 +8,7 @@ import { gradeQuiz, isCorrect, type Attempt, type Question, type Quiz } from "@/
 import Review, { correctText } from "@/components/QuizReview";
 import { Confetti, ErrorBox, Ring, SubjectChip } from "@/components/ui";
 import { useTodo } from "@/lib/todo";
+import AddMore from "@/components/AddMore";
 
 type Resp = Attempt["responses"];
 
@@ -100,6 +101,7 @@ export default function QuizPage() {
         )}
         {qs.length === 0 && <p className="text-slate-500">All questions removed.</p>}
         {qs.map((q, i) => <Review key={q.id} q={q} n={i + 1} onRemove={() => remove(q)} onReplace={() => replace(q)} busy={busy} />)}
+        <AddMore what="questions" endpoint="/api/quiz/add" body={{ quiz_id: id }} options={[1, 2, 3, 4, 5, 6, 8, 10]} defaultCount={2} onDone={load} />
       </div>
     );
   }

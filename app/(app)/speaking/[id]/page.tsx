@@ -7,10 +7,12 @@ import VoiceRecorder, { type Recorded } from "@/components/VoiceRecorder";
 import AudioPlayer from "@/components/AudioPlayer";
 import { useTodo } from "@/lib/todo";
 import { Confetti, ErrorBox } from "@/components/ui";
+import MistakeList, { type Mistake } from "@/components/MistakeList";
+import AddMore from "@/components/AddMore";
 
 type SetRow = { id: string; topic: string; week_start: string; status: "draft" | "assigned" };
 type Task = { id: string; position: number; kind: "repeat" | "answer" | "describe"; prompt: string; target: string; hint: string };
-type Att = { id: string; task_id: string; audio_path: string | null; transcript: string; ai_score: number | null; ai_feedback: string; teacher_score: number | null; teacher_comment: string; created_at: string };
+type Att = { id: string; task_id: string; audio_path: string | null; transcript: string; ai_score: number | null; ai_feedback: string; mistakes: Mistake[]; teacher_score: number | null; teacher_comment: string; created_at: string };
 
 const KIND: Record<string, string> = { repeat: "🔁 Repeat after me", answer: "💬 Answer", describe: "🖼️ Describe" };
 const stars = (n: number) => "⭐".repeat(n) + "☆".repeat(5 - n);
@@ -32,6 +34,7 @@ function Result({ a }: { a: Att }) {
       {sc === null ? <div className="font-semibold">Waiting for ma&apos;am&apos;s marks 🎧</div> : <div className="text-xl">{stars(sc)} <span className="text-base font-bold">{sc}/5</span></div>}
       {a.ai_feedback && <p>🤖 {a.ai_feedback}</p>}
       {a.teacher_comment && <p>👩‍🏫 Ma&apos;am: “{a.teacher_comment}”</p>}
+      <MistakeList items={a.mistakes} />
     </div>
   );
 }
@@ -184,6 +187,7 @@ export default function SpeakingSet() {
           </article>
         );
       })}
+      {isTeacher && <AddMore what="speaking tasks" endpoint="/api/speaking/add" body={{ set_id: id }} options={[1, 2, 3, 4, 5, 6]} defaultCount={2} onDone={() => { load(); todo.refresh(); }} />}
     </div>
   );
 }
