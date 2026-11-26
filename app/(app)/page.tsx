@@ -3,12 +3,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase, today } from "@/lib/supabase";
 import { useMe } from "@/lib/session";
+import { useTodo } from "@/lib/todo";
+import TodoModal from "@/components/TodoModal";
 
 type Hw = { id: string; subject: string; title: string; due_date: string | null };
 type Test = { id: string; subject: string; title: string; test_date: string };
 
 export default function Home() {
   const me = useMe();
+  const todo = useTodo();
   const [zoom, setZoom] = useState("");
   const [classTime, setClassTime] = useState("");
   const [todayStatus, setTodayStatus] = useState<string | null>(null);
@@ -41,6 +44,24 @@ export default function Home() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Hi {me.role === "student" ? me.name : "👋"}!</h1>
+      {me.role === "student" && <TodoModal />}
+
+      {todo.items.length > 0 && (
+        <section className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4">
+          <h2 className="font-bold mb-2">{me.role === "teacher" ? "🔔 Needs your attention" : me.role === "parent" ? "🔔 Pending for Kashika" : "🔔 To do"} ({todo.items.length})</h2>
+          <ul className="space-y-2">
+            {todo.items.map((it, i) => (
+              <li key={i}>
+                <Link href={it.href} className="flex items-center gap-3 bg-white rounded-xl px-3 py-2 shadow-sm active:scale-[.98] transition">
+                  <span className="text-xl">{it.icon}</span>
+                  <span className="flex-1 min-w-0"><span className="block font-semibold text-sm truncate">{it.title}</span><span className="block text-xs text-gray-500 truncate">{it.sub}</span></span>
+                  <span className="text-indigo-600">→</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {zoom ? (
         <a href={zoom} target="_blank" rel="noreferrer"

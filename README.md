@@ -22,5 +22,12 @@ Setup: run `supabase/v2_quizzes.sql` in the Supabase SQL editor, and add `ANTHRO
 
 Note: answer keys of *assigned* quizzes are readable by the student's browser (fine for a home practice app).
 
-## Roadmap
-- V3: English speaking quiz with voice notes
+## V3 — English speaking (voice notes)
+Ma'am gives an optional topic → Claude drafts 4 speaking tasks (repeat-after-me, answer, describe) → ma'am reviews and assigns → Kashika records a voice note per task (mic button; `🔊 Listen` reads repeat-sentences aloud) → the browser transcribes it (Web Speech API, works in Chrome/Safari; no extra key) → Claude gives 0-5 stars + a kind tip → ma'am can listen to the recording and override the marks.
+
+Setup: run `supabase/v3_speaking.sql` (also adds multi-photo uploads). No new env vars.
+
+Limits: the transcript comes from browser speech recognition, so scores are an AI *estimate* of content/grammar/word match, not a true pronunciation grader; ma'am's marks always win. If a browser can't transcribe, the recording is still saved and ma'am marks it.
+
+## Reminders
+Home shows a "To do" card, a once-per-visit pop-up for Kashika, and red badges on the menu (homework, quizzes, speaking, tests due within 3 days). Ma'am sees what needs checking/reviewing.

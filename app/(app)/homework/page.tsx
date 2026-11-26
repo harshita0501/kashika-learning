@@ -3,9 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase, uploadFile, fileUrl } from "@/lib/supabase";
 import { useMe } from "@/lib/session";
 import { SUBJECTS, SUBJECT_STYLE } from "@/lib/constants";
+import FileInput from "@/components/FileInput";
 
-type Hw = { id: string; subject: string; title: string; description: string; due_date: string | null; file_path: string | null };
-type Sub = { id: string; homework_id: string; file_path: string | null; note: string; status: "submitted" | "checked" | "redo"; marks: number | null; comment: string };
+type Hw = { id: string; subject: string; title: string; description: string; due_date: string | null; file_paths: string[] };
+type Sub = { id: string; homework_id: string; file_paths: string[]; note: string; status: "submitted" | "checked" | "redo"; marks: number | null; comment: string };
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   pending: { label: "Pending", cls: "bg-gray-100 text-gray-700" },
@@ -40,11 +41,11 @@ export default function Homework() {
     const f = new FormData(form);
     setErr("");
     try {
-      const file = f.get("file") as File;
-      const file_path = file && file.size ? await uploadFile(file, "homework") : null;
+      const files = (f.getAll("file") as File[]).filter((x) => x.size);
+      const file_paths = await Promise.all(files.map((x) => uploadFile(x, "homework")));
       const { error } = await supabase.from("homework").insert({
         subject: f.get("subject"), title: f.get("title"), description: f.get("description"),
-        due_date: f.get("due") || null, file_path,
+        due_date: f.get("due") || null, file_paths, file_path: file_paths[0] ?? null,
       });
       if (error) throw error;
       form.reset();
@@ -57,11 +58,11 @@ export default function Homework() {
     const f = new FormData(e.currentTarget);
     setErr("");
     try {
-      const file = f.get("file") as File;
+      const files = (f.getAll("file") as File[]).filter((x) => x.size);
       const existing = subs[hw.id];
-      const file_path = file && file.size ? await uploadFile(file, "answers") : existing?.file_path ?? null;
-      if (!file_path && !f.get("note")) { setErr("Please add a photo/file or a note."); return; }
-      const row = { homework_id: hw.id, file_path, note: f.get("note") as string, status: "submitted", submitted_at: new Date().toISOString() };
+      const file_paths = files.length ? await Promise.all(files.map((x) => uploadFile(x, "answers"))) : existing?.file_paths ?? [];
+      if (!file_paths.length && !f.get("note")) { setErr("Please add a photo/file or a note."); return; }
+      const row = { homework_id: hw.id, file_paths, file_path: file_paths[0] ?? null, note: f.get("note") as string, status: "submitted", submitted_at: new Date().toISOString() };
       const { error } = existing
         ? await supabase.from("submissions").update(row).eq("id", existing.id)
         : await supabase.from("submissions").insert(row);
@@ -91,7 +92,7 @@ export default function Homework() {
             <input name="title" required placeholder="Title (e.g. Exercise 3.2)" className="w-full border rounded-xl px-3 py-2" />
             <textarea name="description" placeholder="Instructions (optional)" className="w-full border rounded-xl px-3 py-2" />
             <label className="block text-sm">Due date <input type="date" name="due" className="border rounded-xl px-3 py-2 ml-2" /></label>
-            <label className="block text-sm">File/photo (optional) <input type="file" name="file" className="block mt-1" /></label>
+            <FileInput name="file" multiple label="Add homework photo / file (optional)" />
             <button className="bg-indigo-600 text-white rounded-xl px-5 py-2 font-semibold">Add homework</button>
           </form>
         </details>
@@ -110,13 +111,13 @@ export default function Homework() {
             </div>
             <h2 className="font-bold">{h.title}</h2>
             {h.description && <p className="text-sm text-gray-700 whitespace-pre-wrap">{h.description}</p>}
-            {h.file_path && <FileLink path={h.file_path} label="📎 Open homework file" />}
+            {h.file_paths.map((p, i) => <div key={p}><FileLink path={p} label={`📎 Open homework file${h.file_paths.length > 1 ? " " + (i + 1) : ""}`} /></div>)}
 
             {s && (
               <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
                 <div className="font-semibold">Kashika&apos;s answer</div>
                 {s.note && <p>{s.note}</p>}
-                {s.file_path && <FileLink path={s.file_path} label="📷 Open answer" />}
+                {s.file_paths.map((p, i) => <div key={p}><FileLink path={p} label={`📷 Open answer${s.file_paths.length > 1 ? " page " + (i + 1) : ""}`} /></div>)}
                 {s.status !== "submitted" && (
                   <p className="pt-1">{s.marks !== null && <b>Marks: {s.marks} </b>}{s.comment && <>· Ma&apos;am: “{s.comment}”</>}</p>
                 )}
@@ -125,9 +126,9 @@ export default function Homework() {
 
             {me.role === "student" && (!s || s.status !== "checked") && (
               <form onSubmit={(e) => submitAnswer(h, e)} className="space-y-2 border-t pt-2">
-                <input type="file" name="file" accept="image/*,application/pdf" className="block text-sm" />
+                <FileInput name="file" multiple color="green" label="Add photo of your answer" />
                 <input name="note" placeholder="Note for ma'am (optional)" defaultValue={s?.note} className="w-full border rounded-xl px-3 py-2 text-sm" />
-                <button className="bg-green-600 text-white rounded-xl px-5 py-2 font-semibold">{s ? "Submit again" : "Submit answer"}</button>
+                <button className="w-full bg-green-600 text-white text-lg rounded-2xl py-3 font-bold active:scale-[.98] transition">{s ? "Submit again" : "✅ Submit answer"}</button>
               </form>
             )}
 

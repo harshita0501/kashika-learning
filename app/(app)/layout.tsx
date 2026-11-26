@@ -4,14 +4,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { SessionProvider, type Me } from "@/lib/session";
+import { TodoProvider, useTodo } from "@/lib/todo";
 
 const NAV = [
   { href: "/", label: "Home", icon: "🏠" },
   { href: "/attendance", label: "Attendance", icon: "📅" },
   { href: "/homework", label: "Homework", icon: "📝" },
   { href: "/quizzes", label: "Quizzes", icon: "🧠" },
+  { href: "/speaking", label: "Speaking", icon: "🎤" },
   { href: "/tests", label: "Tests", icon: "🏆" },
 ];
+
+const BADGE_KEY: Record<string, "homework" | "quizzes" | "speaking" | "tests"> = {
+  "/homework": "homework", "/quizzes": "quizzes", "/speaking": "speaking", "/tests": "tests",
+};
 
 function Shell({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
@@ -32,6 +38,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionProvider value={me}>
+      <TodoProvider role={me.role}>
       <div className="max-w-3xl mx-auto pb-24 md:pb-8">
         <header className="flex items-center justify-between p-4">
           <div className="font-bold text-lg">📚 Kashika Learning</div>
@@ -49,13 +56,22 @@ function Shell({ children }: { children: React.ReactNode }) {
             <Link key={n.href} href={n.href}
               className={`flex flex-col md:flex-row md:gap-2 items-center px-3 py-2 text-xs md:text-sm md:rounded-full ${
                 (n.href === "/" ? path === "/" : path.startsWith(n.href)) ? "text-indigo-600 font-bold md:bg-indigo-100" : "text-gray-500"}`}>
-              <span className="text-xl md:text-base">{n.icon}</span>{n.label}
+              <span className="relative text-xl md:text-base">{n.icon}<Badge href={n.href} /></span>{n.label}
             </Link>
           ))}
         </nav>
       </div>
+      </TodoProvider>
     </SessionProvider>
   );
+}
+
+function Badge({ href }: { href: string }) {
+  const { counts } = useTodo();
+  const k = BADGE_KEY[href];
+  const n = k ? counts[k] : 0;
+  if (!n) return null;
+  return <span className="absolute -top-1 -right-2 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center font-bold">{n}</span>;
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
