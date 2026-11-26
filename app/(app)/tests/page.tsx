@@ -1,19 +1,24 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { supabase, today } from "@/lib/supabase";
+import { supabase, today, uploadFile } from "@/lib/supabase";
 import { useMe } from "@/lib/session";
-import { SUBJECTS, SUBJECT_STYLE } from "@/lib/constants";
+import { SUBJECTS, subjectMeta } from "@/lib/constants";
+import FileInput from "@/components/FileInput";
+import Thumb from "@/components/Thumb";
+import { Empty, ErrorBox, PageTitle, Ring, SubjectChip, Tabs } from "@/components/ui";
 
-type T = { id: string; subject: string; title: string; test_date: string; syllabus: string; marks_obtained: number | null; max_marks: number | null };
+type T = { id: string; subject: string; title: string; test_date: string; syllabus: string; marks_obtained: number | null; max_marks: number | null; file_paths: string[] };
 
 export default function Tests() {
   const me = useMe();
   const [tests, setTests] = useState<T[]>([]);
   const [err, setErr] = useState("");
+  const [tab, setTab] = useState<"up" | "past">("up");
+  const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("tests").select("*").order("test_date", { ascending: false });
-    setTests(data ?? []);
+    setTests((data ?? []) as T[]);
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -27,66 +32,97 @@ export default function Tests() {
     });
     if (error) setErr(error.message); else { setErr(""); form.reset(); load(); }
   }
-
   async function setMarks(id: string, e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const v = new FormData(e.currentTarget).get("marks");
     await supabase.from("tests").update({ marks_obtained: v === "" ? null : Number(v) }).eq("id", id);
     load();
   }
-
-  async function remove(id: string) {
-    if (confirm("Delete this test?")) { await supabase.from("tests").delete().eq("id", id); load(); }
+  async function addPaper(t: T, e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const files = (new FormData(e.currentTarget).getAll("file") as File[]).filter((x) => x.size);
+    if (!files.length) return;
+    setBusy(t.id); setErr("");
+    try {
+      const paths = await Promise.all(files.map((x) => uploadFile(x, "tests")));
+      const { error } = await supabase.from("tests").update({ file_paths: [...t.file_paths, ...paths] }).eq("id", t.id);
+      if (error) throw error;
+      load();
+    } catch (x) { setErr((x as Error).message); }
+    setBusy(null);
   }
+  async function remove(id: string) { if (confirm("Delete this test?")) { await supabase.from("tests").delete().eq("id", id); load(); } }
 
   const t0 = today();
   const upcoming = tests.filter((t) => t.test_date >= t0).reverse();
   const past = tests.filter((t) => t.test_date < t0);
+  const daysTo = (d: string) => Math.round((new Date(d).getTime() - new Date(t0).getTime()) / 86400000);
 
-  const Card = (t: T) => (
-    <article key={t.id} className="bg-white rounded-2xl p-4 shadow-sm space-y-1">
-      <div className="flex items-center gap-2">
-        <span className={`text-xs px-2 py-1 rounded-full font-semibold ${SUBJECT_STYLE[t.subject]}`}>{t.subject}</span>
-        <span className="text-xs text-gray-500 ml-auto">{t.test_date}</span>
-      </div>
-      <h3 className="font-bold">{t.title}</h3>
-      {t.syllabus && <p className="text-sm text-gray-700">Syllabus: {t.syllabus}</p>}
-      {t.test_date < t0 && (
-        me.role === "teacher" ? (
-          <form onSubmit={(e) => setMarks(t.id, e)} className="flex items-center gap-2 pt-1">
-            <input name="marks" type="number" step="0.5" defaultValue={t.marks_obtained ?? ""} placeholder="Marks" className="border rounded-xl px-3 py-1 w-24 text-sm" />
-            <span className="text-sm">/ {t.max_marks ?? "?"}</span>
-            <button className="text-indigo-600 text-sm font-semibold">Save</button>
-          </form>
-        ) : (
-          <p className="font-semibold">{t.marks_obtained === null ? "Marks not added yet" : `Marks: ${t.marks_obtained} / ${t.max_marks ?? "?"}`}</p>
-        )
-      )}
-      {me.role === "teacher" && <button onClick={() => remove(t.id)} className="text-xs text-red-500">Delete</button>}
-    </article>
-  );
+  const Card = (t: T, i: number) => {
+    const isPast = t.test_date < t0;
+    const pct = t.marks_obtained !== null && t.max_marks ? Math.round((t.marks_obtained / t.max_marks) * 100) : null;
+    const m = subjectMeta(t.subject);
+    return (
+      <article key={t.id} className="card overflow-hidden fade-up" style={{ animationDelay: `${Math.min(i, 8) * 0.05}s` }}>
+        <div className={`h-2 bg-gradient-to-r ${m.grad}`} />
+        <div className="p-4 space-y-2.5">
+          <div className="flex items-center gap-2">
+            <SubjectChip subject={t.subject} />
+            {!isPast && <span className={`chip ${daysTo(t.test_date) <= 1 ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>⏳ {daysTo(t.test_date) === 0 ? "Today!" : daysTo(t.test_date) === 1 ? "Tomorrow" : `in ${daysTo(t.test_date)} days`}</span>}
+            <span className="ml-auto text-xs font-bold text-slate-500">📅 {t.test_date}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <h2 className="font-display font-extrabold text-xl leading-snug">{t.title}</h2>
+              {t.syllabus && <p className="text-sm text-slate-600">📖 {t.syllabus}</p>}
+            </div>
+            {isPast && pct !== null && (
+              <Ring value={pct} max={100} size={76} stroke={9} from={pct >= 80 ? "#34d399" : pct >= 50 ? "#fbbf24" : "#fb7185"} to={pct >= 80 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#ef4444"}>
+                <div><div className="font-display font-extrabold text-sm leading-none">{t.marks_obtained}/{t.max_marks}</div><div className="text-[10px] font-bold text-slate-500">{pct}%</div></div>
+              </Ring>
+            )}
+          </div>
+          {isPast && pct === null && <p className="text-sm font-bold text-slate-400">Marks not added yet</p>}
+          {t.file_paths.length > 0 && <div className="flex flex-wrap gap-2">{t.file_paths.map((p, k) => <Thumb key={p} path={p} label={`Paper ${k + 1}`} />)}</div>}
+
+          {me.role === "teacher" && isPast && (
+            <div className="space-y-2 border-t border-dashed border-violet-200 pt-3">
+              <form onSubmit={(e) => setMarks(t.id, e)} className="flex items-center gap-2">
+                <input name="marks" type="number" step="0.5" defaultValue={t.marks_obtained ?? ""} placeholder="Marks" className="field !w-28" />
+                <span className="font-bold">/ {t.max_marks ?? "?"}</span>
+                <button className="btn btn-soft">Save marks</button>
+              </form>
+              <form onSubmit={(e) => addPaper(t, e)} className="space-y-2">
+                <FileInput name="file" multiple label="Add checked paper (photo)" />
+                <button disabled={busy === t.id} className="btn btn-soft">{busy === t.id ? "Uploading…" : "Upload paper"}</button>
+              </form>
+            </div>
+          )}
+          {me.role === "teacher" && <button onClick={() => remove(t.id)} className="text-xs font-bold text-rose-500">Delete test</button>}
+        </div>
+      </article>
+    );
+  };
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">🏆 Tests</h1>
-      {err && <p className="bg-red-50 text-red-700 rounded-xl p-3 text-sm">{err}</p>}
+      <PageTitle emoji="🏆" title="Tests" sub="Upcoming tests and past marks" />
+      {err && <ErrorBox>{err}</ErrorBox>}
       {me.role === "teacher" && (
-        <details className="bg-white rounded-2xl p-4 shadow-sm">
-          <summary className="font-semibold cursor-pointer">➕ Schedule a test</summary>
-          <form onSubmit={add} className="space-y-2 mt-3">
-            <select name="subject" className="w-full border rounded-xl px-3 py-2">{SUBJECTS.map((s) => <option key={s}>{s}</option>)}</select>
-            <input name="title" required placeholder="Test name (e.g. Unit Test 1)" className="w-full border rounded-xl px-3 py-2" />
-            <input type="date" name="date" required className="border rounded-xl px-3 py-2" />
-            <input name="max" type="number" placeholder="Total marks" className="border rounded-xl px-3 py-2 ml-2 w-32" />
-            <textarea name="syllabus" placeholder="Syllabus / chapters" className="w-full border rounded-xl px-3 py-2" />
-            <button className="bg-indigo-600 text-white rounded-xl px-5 py-2 font-semibold">Add test</button>
+        <details className="card p-4 fade-up">
+          <summary className="font-extrabold cursor-pointer select-none">➕ Schedule a test</summary>
+          <form onSubmit={add} className="space-y-2.5 mt-3">
+            <select name="subject" className="field">{SUBJECTS.map((s) => <option key={s}>{s}</option>)}</select>
+            <input name="title" required placeholder="Test name (e.g. Unit Test 1)" className="field" />
+            <div className="flex gap-2"><input type="date" name="date" required className="field" /><input name="max" type="number" placeholder="Total marks" className="field !w-36" /></div>
+            <textarea name="syllabus" placeholder="Syllabus / chapters" className="field" rows={2} />
+            <button className="btn btn-primary btn-big">Add test</button>
           </form>
         </details>
       )}
-      <h2 className="font-bold">Upcoming</h2>
-      {upcoming.length ? upcoming.map(Card) : <p className="text-gray-500 text-sm">No upcoming tests.</p>}
-      <h2 className="font-bold pt-2">Past tests</h2>
-      {past.length ? past.map(Card) : <p className="text-gray-500 text-sm">Nothing yet.</p>}
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: "up", label: "Upcoming", count: upcoming.length }, { id: "past", label: "Past tests & marks" }]} />
+      {tab === "up" && (upcoming.length ? upcoming.map(Card) : <Empty emoji="🌈" title="No upcoming tests" sub="Relax and keep learning!" />)}
+      {tab === "past" && (past.length ? past.map(Card) : <Empty emoji="📭" title="No past tests yet" />)}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useMe } from "@/lib/session";
+import { PageTitle } from "@/components/ui";
 
 export default function Settings() {
   const me = useMe();
@@ -24,16 +25,18 @@ export default function Settings() {
   }
 
   return (
-    <form onSubmit={save} className="bg-white rounded-2xl p-5 shadow-sm space-y-3">
-      <h1 className="text-2xl font-bold">⚙️ Settings</h1>
-      <label className="block text-sm font-medium">Zoom meeting link
-        <input value={zoom} onChange={(e) => setZoom(e.target.value)} type="url" placeholder="https://zoom.us/j/..." className="w-full border rounded-xl px-3 py-2 mt-1" />
-      </label>
-      <label className="block text-sm font-medium">Class time (shown on Join button)
-        <input value={time} onChange={(e) => setTime(e.target.value)} placeholder="e.g. 4:00 PM – 5:30 PM, Mon–Sat" className="w-full border rounded-xl px-3 py-2 mt-1" />
-      </label>
-      <button className="bg-indigo-600 text-white rounded-xl px-5 py-2 font-semibold">Save</button>
-      {msg && <p className="text-sm text-green-700">{msg}</p>}
-    </form>
+    <div className="space-y-4">
+      <PageTitle emoji="⚙️" title="Settings" sub="Zoom link and class time" />
+      <form onSubmit={save} className="card p-5 space-y-3 fade-up">
+        <label className="block text-sm font-extrabold">Zoom meeting link
+          <input value={zoom} onChange={(e) => setZoom(e.target.value)} type="url" placeholder="https://zoom.us/j/..." className="field mt-1" />
+        </label>
+        <label className="block text-sm font-extrabold">Class time (shown on the Join button)
+          <input value={time} onChange={(e) => setTime(e.target.value)} placeholder="e.g. 4:00 PM – 5:30 PM, Mon–Sat" className="field mt-1" />
+        </label>
+        <button className="btn btn-primary btn-big">Save</button>
+        {msg && <p className="text-sm font-bold text-emerald-700 pop">{msg}</p>}
+      </form>
+    </div>
   );
 }

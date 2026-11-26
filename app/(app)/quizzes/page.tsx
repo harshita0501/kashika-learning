@@ -3,25 +3,25 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useMe } from "@/lib/session";
-import { SUBJECTS, SUBJECT_STYLE } from "@/lib/constants";
+import { SUBJECTS, subjectMeta } from "@/lib/constants";
 import type { Quiz, Attempt } from "@/lib/quiz";
+import { Empty, ErrorBox, PageTitle, SubjectChip, Tabs } from "@/components/ui";
+import { useTodo } from "@/lib/todo";
 
 const PLACEHOLDER: Record<string, string> = {
-  Hindi: "e.g. vilom shabd / matraen",
-  English: "e.g. prepositions, articles",
-  EVS: "e.g. road transport",
-  Maths: "e.g. division",
-  Science: "e.g. solar system",
+  Hindi: "e.g. vilom shabd / matraen", English: "e.g. prepositions, articles", EVS: "e.g. road transport", Maths: "e.g. division", Science: "e.g. solar system",
 };
 
 export default function Quizzes() {
   const me = useMe();
+  const todo = useTodo();
   const [quizzes, setQuizzes] = useState<(Quiz & { n: number })[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [topics, setTopics] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string }[]>([]);
   const [err, setErr] = useState("");
+  const [tab, setTab] = useState<"new" | "done">("new");
 
   const load = useCallback(async () => {
     const [q, a] = await Promise.all([
@@ -40,62 +40,61 @@ export default function Quizzes() {
       const res = await fetch("/api/quiz/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topics }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "Something went wrong");
-      setMsg(j.results.map((r: { subject: string; ok: boolean; count?: number; error?: string }) =>
-        ({ ok: r.ok, text: r.ok ? `${r.subject}: ${r.count} questions ready for review` : `${r.subject}: ${r.error}` })));
-      setTopics({});
-      load();
+      setMsg(j.results.map((r: { subject: string; ok: boolean; count?: number; error?: string }) => ({ ok: r.ok, text: r.ok ? `${r.subject}: ${r.count} questions ready for review` : `${r.subject}: ${r.error}` })));
+      setTopics({}); load(); todo.refresh();
     } catch (x) { setErr((x as Error).message); }
     setBusy(false);
   }
 
   const latest = (id: string) => attempts.find((a) => a.quiz_id === id);
-  const weeks = [...new Set(quizzes.map((q) => q.week_start))];
+  const isTeacher = me.role === "teacher";
+  const list = isTeacher ? quizzes : quizzes.filter((q) => (tab === "new" ? !latest(q.id) : !!latest(q.id)));
+  const weeks = [...new Set(list.map((q) => q.week_start))];
+  const newCount = quizzes.filter((q) => !latest(q.id)).length;
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">🧠 Weekly Quizzes</h1>
+      <PageTitle emoji="🧠" title="Weekly Quizzes" sub={isTeacher ? "Make, review and assign" : "Test your brain!"} />
 
-      {me.role === "teacher" && (
-        <form onSubmit={generate} className="bg-white rounded-2xl p-4 shadow-sm space-y-2">
-          <h2 className="font-semibold">✨ Make this week&apos;s quizzes</h2>
-          <p className="text-sm text-gray-600">Write a topic for each subject (leave blank to skip). The AI will draft the quiz and you can review it before giving it to Kashika.</p>
+      {isTeacher && (
+        <form onSubmit={generate} className="card p-4 space-y-2.5 fade-up">
+          <h2 className="font-display font-extrabold text-xl">✨ Make this week&apos;s quizzes</h2>
+          <p className="text-sm text-slate-600">Write a topic for each subject (leave blank to skip). The AI drafts the quiz and you review it before giving it to Kashika.</p>
           {SUBJECTS.map((s) => (
-            <label key={s} className="flex items-center gap-2 text-sm">
-              <span className={`w-20 text-center text-xs px-2 py-1 rounded-full font-semibold ${SUBJECT_STYLE[s]}`}>{s}</span>
-              <input value={topics[s] ?? ""} onChange={(e) => setTopics({ ...topics, [s]: e.target.value })} placeholder={PLACEHOLDER[s]}
-                className="flex-1 border rounded-xl px-3 py-2" disabled={busy} />
+            <label key={s} className="flex items-center gap-2">
+              <span className={`chip w-24 justify-center ${subjectMeta(s).chip}`}>{subjectMeta(s).icon} {s}</span>
+              <input value={topics[s] ?? ""} onChange={(e) => setTopics({ ...topics, [s]: e.target.value })} placeholder={PLACEHOLDER[s]} className="field" disabled={busy} />
             </label>
           ))}
-          <button disabled={busy} className="bg-indigo-600 text-white rounded-xl px-5 py-2 font-semibold disabled:opacity-50">
-            {busy ? "Making quizzes… (about a minute)" : "Create quizzes"}
-          </button>
-          {err && <p className="text-red-600 text-sm">{err}</p>}
-          {msg.map((m, i) => <p key={i} className={`text-sm ${m.ok ? "text-green-700" : "text-red-600"}`}>{m.ok ? "✓" : "✗"} {m.text}</p>)}
+          <button disabled={busy} className="btn btn-primary btn-big">{busy ? "🪄 Making quizzes… (about a minute)" : "🪄 Create quizzes"}</button>
+          {err && <ErrorBox>{err}</ErrorBox>}
+          {msg.map((m, i) => <p key={i} className={`text-sm font-bold ${m.ok ? "text-emerald-700" : "text-rose-600"}`}>{m.ok ? "✓" : "✗"} {m.text}</p>)}
         </form>
       )}
 
-      {quizzes.length === 0 && <p className="text-gray-500">{me.role === "teacher" ? "No quizzes yet." : "No quiz assigned yet."}</p>}
+      {!isTeacher && <Tabs value={tab} onChange={setTab} tabs={[{ id: "new", label: "To do", count: newCount }, { id: "done", label: "Completed" }]} />}
+
+      {list.length === 0 && <Empty emoji={isTeacher ? "🪄" : tab === "new" ? "🎉" : "📭"} title={isTeacher ? "No quizzes yet" : tab === "new" ? "No new quizzes!" : "No completed quizzes yet"} sub={isTeacher ? "Create this week's quizzes above" : undefined} />}
 
       {weeks.map((w) => (
         <section key={w} className="space-y-2">
-          <h2 className="font-bold text-gray-700">Week of {w}</h2>
-          {quizzes.filter((q) => q.week_start === w).map((q) => {
-            const a = latest(q.id);
+          <h2 className="font-display font-extrabold text-slate-600">📆 Week of {w}</h2>
+          {list.filter((q) => q.week_start === w).map((q, i) => {
+            const a = latest(q.id), m = subjectMeta(q.subject);
             return (
-              <Link key={q.id} href={`/quizzes/${q.id}`} className="block bg-white rounded-2xl p-4 shadow-sm active:scale-[.99] transition">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-xs px-2 py-1 rounded-full font-semibold ${SUBJECT_STYLE[q.subject]}`}>{q.subject}</span>
-                  {me.role === "teacher" && (
-                    <span className={`text-xs px-2 py-1 rounded-full ${q.status === "draft" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"}`}>
-                      {q.status === "draft" ? "Draft — needs review" : "Assigned"}
-                    </span>
-                  )}
-                  <span className="ml-auto text-sm font-semibold">
-                    {a ? `⭐ ${a.score}/${a.total}` : me.role === "student" ? "Start →" : q.status === "assigned" ? "Not attempted" : ""}
-                  </span>
+              <Link key={q.id} href={`/quizzes/${q.id}`} className="card card-lift flex overflow-hidden fade-up" style={{ animationDelay: `${i * 0.05}s` }}>
+                <div className={`w-20 grid place-items-center text-4xl bg-gradient-to-b ${m.grad}`}>{m.icon}</div>
+                <div className="flex-1 p-3.5 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <SubjectChip subject={q.subject} />
+                    {isTeacher && <span className={`chip ${q.status === "draft" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{q.status === "draft" ? "Draft — review" : "Assigned"}</span>}
+                  </div>
+                  <div className="font-display font-extrabold text-lg truncate mt-0.5">{q.topic}</div>
+                  <div className="text-xs text-slate-500 font-semibold">{q.n} questions{a ? ` · attempted ${attempts.filter((x) => x.quiz_id === q.id).length}×` : ""}</div>
                 </div>
-                <div className="font-bold mt-1">{q.topic}</div>
-                <div className="text-xs text-gray-500">{q.n} questions</div>
+                <div className="pr-3 grid place-items-center font-extrabold text-sm">
+                  {a ? <span className="chip bg-amber-100 text-amber-800 !text-sm">⭐ {a.score}/{a.total}</span> : !isTeacher && me.role === "student" ? <span className="chip bg-violet-600 text-white !text-sm">Start ›</span> : <span className="text-slate-300 text-xl">›</span>}
+                </div>
               </Link>
             );
           })}

@@ -1,7 +1,90 @@
 @import "tailwindcss";
 
-body {
-  background: #fffaf0;
-  color: #1f2937;
-  font-family: ui-rounded, "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+:root {
+  --ink: #26214f;
+  --muted: #6b6a8c;
+  --brand: #6d4aff;
+  --brand-2: #ff5fa2;
 }
+
+html { -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: "Nunito", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  min-height: 100vh;
+  background-color: #f6f3ff;
+  background-image:
+    radial-gradient(900px 500px at 10% -10%, #dff3ff 0%, transparent 60%),
+    radial-gradient(800px 500px at 100% 0%, #ffe3f1 0%, transparent 55%),
+    radial-gradient(700px 500px at 50% 110%, #fff1cf 0%, transparent 60%);
+  background-attachment: fixed;
+}
+h1, h2, h3, .font-display { font-family: "Baloo 2", "Nunito", ui-rounded, system-ui, sans-serif; letter-spacing: -0.01em; }
+
+/* ---------- building blocks (in the components layer so Tailwind utilities can override them) ---------- */
+@layer components {
+.card {
+  background: #fff;
+  border-radius: 1.5rem;
+  border: 1px solid rgba(109, 74, 255, 0.08);
+  box-shadow: 0 10px 28px -14px rgba(80, 60, 200, 0.32);
+}
+.card-lift { transition: transform .18s ease, box-shadow .18s ease; }
+.card-lift:hover { transform: translateY(-3px); box-shadow: 0 16px 34px -14px rgba(80, 60, 200, 0.42); }
+.card-lift:active { transform: scale(.985); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  border-radius: 1rem; padding: .65rem 1.25rem; font-weight: 800; line-height: 1.2;
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+  box-shadow: 0 6px 0 -2px rgba(0, 0, 0, 0.14);
+}
+.btn:hover { filter: brightness(1.05); }
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 -2px rgba(0, 0, 0, 0.14); }
+.btn:disabled { opacity: .5; pointer-events: none; }
+.btn-primary { background: linear-gradient(135deg, #7a55ff, #5b3df5); color: #fff; }
+.btn-green { background: linear-gradient(135deg, #34d399, #10b981); color: #fff; }
+.btn-red { background: linear-gradient(135deg, #fb7185, #ef4444); color: #fff; }
+.btn-soft { background: #efeaff; color: #4b32c9; box-shadow: none; }
+.btn-ghost { background: #f3f4f8; color: #444a6d; box-shadow: none; }
+.btn-big { padding: .95rem 1.4rem; font-size: 1.1rem; border-radius: 1.25rem; width: 100%; }
+
+.field {
+  width: 100%; border: 2px solid #e6e2fb; border-radius: 1rem; padding: .65rem .9rem; background: #fff;
+  transition: border-color .15s ease, box-shadow .15s ease; outline: none;
+}
+.field:focus { border-color: #8b6cff; box-shadow: 0 0 0 4px rgba(139, 108, 255, 0.18); }
+
+.chip { display: inline-flex; align-items: center; gap: .3rem; border-radius: 999px; padding: .2rem .65rem; font-size: .75rem; font-weight: 800; }
+
+}
+
+/* ---------- motion ---------- */
+@keyframes fade-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fade-up .5s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes pop { 0% { transform: scale(.7); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+.pop { animation: pop .38s ease both; }
+@keyframes float { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
+.float { animation: float 3.2s ease-in-out infinite; }
+@keyframes wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }
+.wiggle { animation: wiggle .5s ease both; }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+.shake { animation: shake .4s ease both; }
+@keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, .55); } 100% { box-shadow: 0 0 0 22px rgba(56, 189, 248, 0); } }
+.pulse-ring { animation: pulse-ring 1.8s ease-out infinite; }
+@keyframes confetti-fall { 0% { transform: translateY(-10vh) rotate(0); opacity: 1; } 100% { transform: translateY(105vh) rotate(720deg); opacity: .9; } }
+.confetti-bit { position: fixed; top: 0; z-index: 60; pointer-events: none; animation: confetti-fall linear forwards; }
+@keyframes bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.bar-grow { transform-origin: left; animation: bar-grow .8s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes shine { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
+
+/* ---------- flip cards ---------- */
+.flip-scene { perspective: 1400px; }
+.flip-card { position: relative; transform-style: preserve-3d; transition: transform .65s cubic-bezier(.2, .8, .2, 1); }
+.flip-card.flipped { transform: rotateY(180deg); }
+.flip-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.flip-back { transform: rotateY(180deg); }

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useMe } from "@/lib/session";
+import { Empty, ErrorBox, PageTitle } from "@/components/ui";
+import { useTodo } from "@/lib/todo";
 
 type SetRow = { id: string; topic: string; week_start: string; status: "draft" | "assigned"; speaking_tasks: { id: string }[] };
 type Att = { task_id: string; ai_score: number | null; teacher_score: number | null; created_at: string };
@@ -11,6 +13,7 @@ type Att = { task_id: string; ai_score: number | null; teacher_score: number | n
 export default function Speaking() {
   const me = useMe();
   const router = useRouter();
+  const todo = useTodo();
   const [sets, setSets] = useState<SetRow[]>([]);
   const [atts, setAtts] = useState<Att[]>([]);
   const [topic, setTopic] = useState("");
@@ -34,7 +37,7 @@ export default function Speaking() {
       const res = await fetch("/api/speaking/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "Something went wrong");
-      router.push(`/speaking/${j.id}`);
+      todo.refresh(); router.push(`/speaking/${j.id}`);
     } catch (x) { setErr((x as Error).message); setBusy(false); }
   }
 
@@ -51,32 +54,35 @@ export default function Speaking() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">🎤 English Speaking</h1>
+      <PageTitle emoji="🎤" title="English Speaking" sub={me.role === "teacher" ? "Make, review and assign" : "Speak up and earn stars!"} />
 
       {me.role === "teacher" && (
-        <form onSubmit={generate} className="bg-white rounded-2xl p-4 shadow-sm space-y-2">
-          <h2 className="font-semibold">✨ Make speaking practice</h2>
+        <form onSubmit={generate} className="card p-4 space-y-2.5 fade-up">
+          <h2 className="font-display font-extrabold text-xl">✨ Make speaking practice</h2>
           <p className="text-sm text-gray-600">Write a topic (optional) like &quot;My family&quot; or &quot;Animals&quot;. Leave it blank and the AI will pick one. You will review the tasks before giving them to Kashika.</p>
-          <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Topic (optional)" className="w-full border rounded-xl px-3 py-2" disabled={busy} />
-          <button disabled={busy} className="bg-indigo-600 text-white rounded-xl px-5 py-2 font-semibold disabled:opacity-50">{busy ? "Making tasks…" : "Create speaking tasks"}</button>
-          {err && <p className="text-red-600 text-sm">{err}</p>}
+          <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Topic (optional)" className="field" disabled={busy} />
+          <button disabled={busy} className="btn btn-primary btn-big">{busy ? "🪄 Making tasks…" : "🪄 Create speaking tasks"}</button>
+          {err && <ErrorBox>{err}</ErrorBox>}
         </form>
       )}
 
-      {sets.length === 0 && <p className="text-gray-500">{me.role === "teacher" ? "Nothing yet." : "No speaking practice yet."}</p>}
-      {sets.map((s) => {
+      {sets.length === 0 && <Empty emoji="🎤" title={me.role === "teacher" ? "Nothing yet" : "No speaking practice yet"} />}
+      {sets.map((s, i) => {
         const m = summary(s);
         return (
-          <Link key={s.id} href={`/speaking/${s.id}`} className="block bg-white rounded-2xl p-4 shadow-sm active:scale-[.99] transition">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs px-2 py-1 rounded-full font-semibold bg-blue-100 text-blue-800">English Speaking</span>
-              {me.role === "teacher" && <span className={`text-xs px-2 py-1 rounded-full ${s.status === "draft" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"}`}>{s.status === "draft" ? "Draft — needs review" : "Assigned"}</span>}
-              <span className="ml-auto text-sm font-semibold">
-                {m.done === 0 ? (me.role === "student" ? "Start →" : "") : m.done < m.total ? `${m.done}/${m.total} done` : m.pending ? "Waiting for marks" : `⭐ ${m.got}/${m.total * 5}`}
-              </span>
+          <Link key={s.id} href={`/speaking/${s.id}`} className="card card-lift flex overflow-hidden fade-up" style={{ animationDelay: `${i * 0.05}s` }}>
+            <div className="w-20 grid place-items-center text-4xl bg-gradient-to-b from-sky-400 to-blue-500">🎤</div>
+            <div className="flex-1 p-3.5 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="chip bg-sky-100 text-sky-800">🔤 English Speaking</span>
+                {me.role === "teacher" && <span className={`chip ${s.status === "draft" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{s.status === "draft" ? "Draft — review" : "Assigned"}</span>}
+              </div>
+              <div className="font-display font-extrabold text-lg truncate mt-0.5">{s.topic}</div>
+              <div className="text-xs text-slate-500 font-semibold">{s.speaking_tasks.length} tasks · week of {s.week_start}</div>
             </div>
-            <div className="font-bold mt-1">{s.topic}</div>
-            <div className="text-xs text-gray-500">{s.speaking_tasks.length} tasks · week of {s.week_start}</div>
+            <div className="pr-3 grid place-items-center text-sm font-extrabold">
+              {m.done === 0 ? (me.role === "student" ? <span className="chip bg-violet-600 text-white !text-sm">Start ›</span> : <span className="text-slate-300 text-xl">›</span>) : m.done < m.total ? <span className="chip bg-sky-100 text-sky-800 !text-sm">{m.done}/{m.total} done</span> : m.pending ? <span className="chip bg-amber-100 text-amber-800 !text-sm">Waiting 🎧</span> : <span className="chip bg-amber-100 text-amber-800 !text-sm">⭐ {m.got}/{m.total * 5}</span>}
+            </div>
           </Link>
         );
       })}

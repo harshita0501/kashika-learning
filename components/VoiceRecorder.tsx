@@ -90,17 +90,17 @@ export default function VoiceRecorder({ onReady, disabled }: { onReady: (r: Reco
     <div className="space-y-2">
       {state !== "recording" ? (
         <button type="button" onClick={start} disabled={disabled}
-          className="w-full bg-red-500 text-white rounded-2xl py-4 text-lg font-bold flex items-center justify-center gap-2 active:scale-[.98] transition disabled:opacity-50">
+          className="btn btn-red btn-big">
           🎤 {state === "done" ? "Record again" : "Tap to speak"}
         </button>
       ) : (
         <button type="button" onClick={stop}
-          className="w-full bg-gray-900 text-white rounded-2xl py-4 text-lg font-bold flex items-center justify-center gap-2 animate-pulse">
+          className="btn btn-big bg-slate-900 text-white animate-pulse">
           ⏹ Stop &nbsp;<span className="font-mono">0:{String(secs).padStart(2, "0")}</span>
         </button>
       )}
-      {state === "recording" && <p className="text-center text-sm text-red-600">● Recording… speak clearly</p>}
-      {heard && <p className="bg-yellow-50 rounded-xl px-3 py-2 text-sm"><b>I heard:</b> {heard}</p>}
+      {state === "recording" && <p className="text-center text-sm font-bold text-rose-600">● Recording… speak clearly</p>}
+      {heard && <p className="bg-amber-50 rounded-xl px-3 py-2 text-sm"><b>I heard:</b> {heard}</p>}
       {url && <audio controls src={url} className="w-full" />}
       {state === "done" && !supported && <p className="text-xs text-gray-500">This browser can&apos;t write down your words. Ma&apos;am will listen to your recording and give marks. (Chrome or Safari can do both.)</p>}
       {err && <p className="text-sm text-red-600">{err}</p>}

@@ -29,5 +29,12 @@ Setup: run `supabase/v3_speaking.sql` (also adds multi-photo uploads). No new en
 
 Limits: the transcript comes from browser speech recognition, so scores are an AI *estimate* of content/grammar/word match, not a true pronunciation grader; ma'am's marks always win. If a browser can't transcribe, the recording is still saved and ma'am marks it.
 
+## UI refresh + history + flashcards
+Playful redesign (mascot, gradients, animations, confetti), streak / stars / levels / badges on Home, one-question-at-a-time quizzes with instant feedback, and a **My Work** page that keeps every old homework answer (photos), quiz attempt (with each answer), speaking recording and test (with marks + checked paper photo), filterable by month and subject.
+Weekly **flashcards**: ma'am gives a theme (optional) → AI makes 10 words (front: English word; back: simple meaning, Hindi hint, example sentence) → review → assign → Kashika flips, listens (🔊) and marks "I know it" / "Practise again". Run `supabase/v4_test_papers.sql` and `supabase/v5_flashcards.sql`.
+
+## AI model
+All AI features read `QUIZ_MODEL` (default `claude-opus-5-5`). Set `QUIZ_MODEL=claude-sonnet-5-5` in Vercel to roughly halve the cost.
+
 ## Reminders
 Home shows a "To do" card, a once-per-visit pop-up for Kashika, and red badges on the menu (homework, quizzes, speaking, tests due within 3 days). Ma'am sees what needs checking/reviewing.

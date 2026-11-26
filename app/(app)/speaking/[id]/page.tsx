@@ -6,6 +6,7 @@ import { useMe } from "@/lib/session";
 import VoiceRecorder, { type Recorded } from "@/components/VoiceRecorder";
 import AudioPlayer from "@/components/AudioPlayer";
 import { useTodo } from "@/lib/todo";
+import { Confetti, ErrorBox } from "@/components/ui";
 
 type SetRow = { id: string; topic: string; week_start: string; status: "draft" | "assigned" };
 type Task = { id: string; position: number; kind: "repeat" | "answer" | "describe"; prompt: string; target: string; hint: string };
@@ -27,7 +28,7 @@ function listen(text: string) {
 function Result({ a }: { a: Att }) {
   const sc = finalScore(a);
   return (
-    <div className="bg-green-50 rounded-xl p-3 text-sm space-y-1">
+    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-sm space-y-1 pop">
       {sc === null ? <div className="font-semibold">Waiting for ma&apos;am&apos;s marks 🎧</div> : <div className="text-xl">{stars(sc)} <span className="text-base font-bold">{sc}/5</span></div>}
       {a.ai_feedback && <p>🤖 {a.ai_feedback}</p>}
       {a.teacher_comment && <p>👩‍🏫 Ma&apos;am: “{a.teacher_comment}”</p>}
@@ -67,6 +68,7 @@ export default function SpeakingSet() {
   const latest = (taskId: string) => atts.find((a) => a.task_id === taskId);
   const total = tasks.reduce((n, t) => n + (finalScore(latest(t.id)) ?? 0), 0);
   const allDone = tasks.length > 0 && tasks.every((t) => latest(t.id));
+  const party = allDone && me.role === "student" && total >= tasks.length * 3;
 
   async function setStatus(status: "draft" | "assigned") { await supabase.from("speaking_sets").update({ status }).eq("id", id); load(); todo.refresh(); }
   async function delSet() { if (!confirm("Delete this whole speaking practice?")) return; await supabase.from("speaking_sets").delete().eq("id", id); todo.refresh(); router.push("/speaking"); }
@@ -102,22 +104,23 @@ export default function SpeakingSet() {
 
   return (
     <div className="space-y-3">
-      <button onClick={() => router.push("/speaking")} className="text-sm text-indigo-600">← All speaking practice</button>
-      <h1 className="text-xl font-bold">🎤 {set.topic}</h1>
+      <button onClick={() => router.push("/speaking")} className="text-sm font-extrabold text-violet-600">‹ All speaking practice</button>
+      <div className="rounded-[1.75rem] p-4 text-white bg-gradient-to-r from-sky-500 to-blue-600 shadow-lg fade-up flex items-center gap-3"><span className="size-12 rounded-2xl bg-white/25 grid place-items-center text-2xl">🎤</span><div><div className="text-white/85 text-xs font-extrabold uppercase tracking-wide">English speaking</div><h1 className="text-2xl font-extrabold leading-tight">{set.topic}</h1></div></div>
 
       {isTeacher && (
-        <div className="bg-white rounded-2xl p-3 shadow-sm flex flex-wrap items-center gap-2">
-          <span className={`text-xs px-2 py-1 rounded-full ${set.status === "draft" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"}`}>{set.status === "draft" ? "Draft" : "Assigned to Kashika"}</span>
+        <div className="card p-3 flex flex-wrap items-center gap-2 fade-up">
+          <span className={`text-xs px-2 py-1 rounded-full ${set.status === "draft" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{set.status === "draft" ? "Draft" : "Assigned to Kashika"}</span>
           {set.status === "draft"
-            ? <button onClick={() => setStatus("assigned")} disabled={!tasks.length} className="bg-green-600 text-white rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-40">✔ Assign to Kashika</button>
-            : <button onClick={() => setStatus("draft")} className="bg-gray-200 rounded-xl px-4 py-2 text-sm font-semibold">Take back to draft</button>}
-          <button onClick={delSet} className="text-red-600 text-sm ml-auto">Delete</button>
+            ? <button onClick={() => setStatus("assigned")} disabled={!tasks.length} className="btn btn-green !py-2">✔ Assign to Kashika</button>
+            : <button onClick={() => setStatus("draft")} className="btn btn-ghost !py-2">Take back to draft</button>}
+          <button onClick={delSet} className="text-rose-600 text-sm font-bold ml-auto">Delete</button>
         </div>
       )}
-      {err && <p className="bg-red-50 text-red-700 rounded-xl p-3 text-sm">{err}</p>}
+      {err && <ErrorBox>{err}</ErrorBox>}
 
+      {party && <Confetti count={30} />}
       {allDone && (
-        <div className="bg-white rounded-2xl p-4 text-center shadow-sm">
+        <div className="card p-5 text-center fade-up">
           <div className="text-4xl">{total >= tasks.length * 4 ? "🏆" : total >= tasks.length * 3 ? "🌟" : "💪"}</div>
           <div className="text-2xl font-bold">{total} / {tasks.length * 5}</div>
           <div className="text-sm text-gray-600">Total speaking stars</div>
@@ -128,16 +131,16 @@ export default function SpeakingSet() {
         const a = latest(t.id);
         const showRecorder = me.role === "student" && (!a || again[t.id]);
         return (
-          <article key={t.id} className="bg-white rounded-2xl p-4 shadow-sm space-y-2">
+          <article key={t.id} className="card p-4 space-y-3 fade-up">
             <div className="flex items-center gap-2">
-              <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800 font-semibold">{KIND[t.kind]}</span>
+              <span className="chip bg-sky-100 text-sky-800">{KIND[t.kind]}</span>
               <span className="text-sm text-gray-500">Task {i + 1}</span>
             </div>
-            <div className="font-semibold">{t.prompt}</div>
+            <div className="font-display font-extrabold text-xl leading-snug">{t.prompt}</div>
             {t.kind === "repeat" && (
-              <div className="bg-indigo-50 rounded-xl p-3 flex items-center gap-3">
-                <span className="flex-1 text-lg font-bold">{t.target}</span>
-                <button type="button" onClick={() => listen(t.target)} className="bg-indigo-600 text-white rounded-xl px-3 py-2 text-sm font-semibold">🔊 Listen</button>
+              <div className="bg-gradient-to-r from-violet-50 to-sky-50 border border-violet-100 rounded-2xl p-3 flex items-center gap-3">
+                <span className="flex-1 text-xl font-extrabold">{t.target}</span>
+                <button type="button" onClick={() => listen(t.target)} className="btn btn-primary !py-2 !px-3 text-sm">🔊 Listen</button>
               </div>
             )}
             {t.hint && <div className="text-sm text-gray-600">💡 {t.hint}</div>}
@@ -145,8 +148,8 @@ export default function SpeakingSet() {
             {isTeacher && (
               <div className="flex gap-3 text-sm">
                 {set.status === "draft" && <>
-                  <button disabled={busy === t.id} onClick={() => replaceTask(t)} className="text-indigo-600 font-semibold disabled:opacity-40">🔄 Replace with new</button>
-                  <button disabled={busy === t.id} onClick={() => removeTask(t)} className="text-red-600 font-semibold disabled:opacity-40">🗑 Remove</button>
+                  <button disabled={busy === t.id} onClick={() => replaceTask(t)} className="text-violet-600 font-extrabold disabled:opacity-40">🔄 Replace with new</button>
+                  <button disabled={busy === t.id} onClick={() => removeTask(t)} className="text-rose-600 font-extrabold disabled:opacity-40">🗑 Remove</button>
                 </>}
               </div>
             )}
@@ -155,7 +158,7 @@ export default function SpeakingSet() {
               <div className="space-y-2 border-t pt-2">
                 <VoiceRecorder onReady={(r) => setRec((p) => ({ ...p, [t.id]: r }))} disabled={busy === t.id} />
                 {rec[t.id] && (
-                  <button onClick={() => send(t)} disabled={busy === t.id} className="w-full bg-green-600 text-white text-lg font-bold rounded-2xl py-3 disabled:opacity-50">
+                  <button onClick={() => send(t)} disabled={busy === t.id} className="btn btn-green btn-big">
                     {busy === t.id ? "Checking… ⏳" : "✅ Send to ma'am"}
                   </button>
                 )}
@@ -165,15 +168,15 @@ export default function SpeakingSet() {
             {a && !showRecorder && (
               <div className="space-y-2 border-t pt-2">
                 {a.audio_path && <AudioPlayer path={a.audio_path} />}
-                {a.transcript && <p className="text-sm bg-yellow-50 rounded-xl px-3 py-2"><b>Heard:</b> {a.transcript}</p>}
+                {a.transcript && <p className="text-sm bg-amber-50 rounded-xl px-3 py-2"><b>Heard:</b> {a.transcript}</p>}
                 <Result a={a} />
-                {me.role === "student" && <button onClick={() => setAgain({ ...again, [t.id]: true })} className="text-indigo-600 text-sm font-semibold">🔁 Try again</button>}
+                {me.role === "student" && <button onClick={() => setAgain({ ...again, [t.id]: true })} className="btn btn-soft !py-2 text-sm">🔁 Try again</button>}
                 {isTeacher && (
                   <form onSubmit={(e) => grade(a, e)} className="flex flex-wrap items-center gap-2">
-                    <label className="text-sm">Your marks <select name="score" defaultValue={a.teacher_score ?? ""} className="border rounded-lg px-2 py-1 ml-1">
+                    <label className="text-sm">Your marks <select name="score" defaultValue={a.teacher_score ?? ""} className="field !w-auto !py-1 ml-1">
                       <option value="">— (use AI: {a.ai_score ?? "?"})</option>{[0, 1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
-                    <input name="comment" defaultValue={a.teacher_comment} placeholder="Comment for Kashika" className="flex-1 min-w-40 border rounded-lg px-2 py-1 text-sm" />
-                    <button className="text-indigo-600 text-sm font-semibold">Save</button>
+                    <input name="comment" defaultValue={a.teacher_comment} placeholder="Comment for Kashika" className="field flex-1 min-w-40 !py-1.5 text-sm" />
+                    <button className="btn btn-soft !py-2 text-sm">Save</button>
                   </form>
                 )}
               </div>

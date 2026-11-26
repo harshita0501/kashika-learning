@@ -22,21 +22,21 @@ export default function Login() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4">
-      <form onSubmit={submit} className="w-full max-w-sm bg-white rounded-3xl shadow-lg p-8 space-y-4">
+    <main className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      <span className="absolute top-10 left-8 text-4xl float">⭐</span>
+      <span className="absolute top-24 right-10 text-3xl float" style={{ animationDelay: ".6s" }}>📚</span>
+      <span className="absolute bottom-16 left-12 text-3xl float" style={{ animationDelay: "1.2s" }}>✏️</span>
+      <span className="absolute bottom-10 right-8 text-4xl float" style={{ animationDelay: "1.8s" }}>🌈</span>
+      <form onSubmit={submit} className="card w-full max-w-sm p-7 space-y-4 pop relative">
         <div className="text-center">
-          <div className="text-5xl">📚</div>
-          <h1 className="text-2xl font-bold mt-2">Kashika Learning</h1>
-          <p className="text-gray-500 text-sm">Please log in</p>
+          <div className="text-7xl float inline-block">🦉</div>
+          <h1 className="text-3xl font-extrabold mt-1">Kashika Learning</h1>
+          <p className="text-slate-500 font-semibold">Let&apos;s learn something fun today!</p>
         </div>
-        <input type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
-          className="w-full border rounded-xl px-4 py-3" />
-        <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)}
-          className="w-full border rounded-xl px-4 py-3" />
-        {err && <p className="text-red-600 text-sm">{err}</p>}
-        <button disabled={busy} className="w-full bg-indigo-600 text-white font-semibold rounded-xl py-3 disabled:opacity-50">
-          {busy ? "Logging in…" : "Log in"}
-        </button>
+        <input type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="field" autoComplete="username" />
+        <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="field" autoComplete="current-password" />
+        {err && <p className="text-rose-600 text-sm font-bold shake">{err}</p>}
+        <button disabled={busy} className="btn btn-primary btn-big">{busy ? "Logging in…" : "Let's go! 🚀"}</button>
       </form>
     </main>
   );
