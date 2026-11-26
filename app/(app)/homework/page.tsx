@@ -4,7 +4,7 @@ import { supabase, uploadFile } from "@/lib/supabase";
 import { useMe } from "@/lib/session";
 import { SUBJECTS, subjectMeta } from "@/lib/constants";
 import FileInput from "@/components/FileInput";
-import Thumb from "@/components/Thumb";
+import { ThumbGrid } from "@/components/Thumb";
 import FileKeeper from "@/components/FileKeeper";
 import { Empty, ErrorBox, PageTitle, SubjectChip, Tabs } from "@/components/ui";
 import { useTodo } from "@/lib/todo";
@@ -202,7 +202,7 @@ export default function Homework() {
                 <>
                   <h2 className="font-display font-extrabold text-xl leading-snug">{h.title}</h2>
                   {h.description && <p className="text-sm text-slate-600 whitespace-pre-wrap">{h.description}</p>}
-                  {h.file_paths.length > 0 && <div className="flex flex-wrap gap-2">{h.file_paths.map((p) => <Thumb key={p} path={p} label="Homework" />)}</div>}
+                  <ThumbGrid paths={h.file_paths} label="Homework" title={h.title} />
                   {isTeacher && (
                     <div className="flex gap-2">
                       <button onClick={() => { setEditHw(h.id); setKeep(h.file_paths); }} className="btn btn-soft !py-1.5 text-sm">✏️ Edit</button>
@@ -216,7 +216,7 @@ export default function Homework() {
                 <div className="rounded-2xl bg-violet-50/70 border border-violet-100 p-3 space-y-2">
                   <div className="font-extrabold text-sm">{isTeacher ? "Kashika's answer" : "My answer"} <span className="text-xs font-semibold text-slate-400">· {new Date(s.submitted_at).toLocaleDateString()}</span></div>
                   {s.note && <p className="text-sm">{s.note}</p>}
-                  {s.file_paths.length > 0 && <div className="flex flex-wrap gap-2">{s.file_paths.map((p, i) => <Thumb key={p} path={p} label={`Page ${i + 1}`} />)}</div>}
+                  <ThumbGrid paths={s.file_paths} label="Page" title={`${isTeacher ? "Kashika's answer" : "My answer"} · ${h.title}`} />
                   {s.status !== "submitted" && (
                     <div className={`rounded-xl px-3 py-2 text-sm ${s.status === "checked" ? "bg-emerald-100 text-emerald-900" : "bg-rose-100 text-rose-900"}`}>
                       {s.marks !== null && <b className="mr-2">⭐ Marks: {s.marks}</b>}

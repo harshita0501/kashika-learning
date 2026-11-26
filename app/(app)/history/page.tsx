@@ -5,7 +5,7 @@ import { useMe } from "@/lib/session";
 import { SUBJECTS, subjectMeta } from "@/lib/constants";
 import type { Attempt, Question } from "@/lib/quiz";
 import Review from "@/components/QuizReview";
-import Thumb from "@/components/Thumb";
+import { ThumbGrid } from "@/components/Thumb";
 import AudioPlayer from "@/components/AudioPlayer";
 import MistakeList, { type Mistake } from "@/components/MistakeList";
 import { Empty, PageTitle, Ring, SubjectChip, Tabs } from "@/components/ui";
@@ -15,7 +15,9 @@ type Sub = { id: string; homework_id: string; file_paths: string[]; note: string
 type QA = Attempt & { quizzes: { subject: string; topic: string } | null };
 type SA = { id: string; audio_path: string | null; transcript: string; ai_score: number | null; ai_feedback: string; mistakes: Mistake[]; teacher_score: number | null; teacher_comment: string; created_at: string;
   speaking_tasks: { prompt: string; kind: string; target: string; speaking_sets: { topic: string } | null } | null };
-type T = { id: string; subject: string; title: string; test_date: string; syllabus: string; marks_obtained: number | null; max_marks: number | null; file_paths: string[] };
+type T = { id: string; subject: string; title: string; test_date: string; syllabus: string; syllabus_files: string[]; marks_obtained: number | null; max_marks: number | null; file_paths: string[] };
+type TP = { test_id: string; file_paths: string[]; note: string };
+type TA = { test_id: string; file_paths: string[]; note: string; submitted_at: string };
 
 const ymd = (d: string) => d.slice(0, 7);
 const monthLabel = (ym: string) => new Date(ym + "-01").toLocaleString("en", { month: "long", year: "numeric" });
@@ -28,6 +30,8 @@ export default function History() {
   const [qas, setQas] = useState<QA[]>([]);
   const [sas, setSas] = useState<SA[]>([]);
   const [tests, setTests] = useState<T[]>([]);
+  const [tpapers, setTpapers] = useState<Record<string, TP>>({});
+  const [tans, setTans] = useState<Record<string, TA>>({});
   const [subject, setSubject] = useState("All");
   const [month, setMonth] = useState("All");
   const [open, setOpen] = useState<string | null>(null);
@@ -36,13 +40,17 @@ export default function History() {
 
   useEffect(() => {
     (async () => {
-      const [h, s, q, sp, t] = await Promise.all([
+      const [h, s, q, sp, t, tp, ta] = await Promise.all([
         supabase.from("homework").select("*"),
         supabase.from("submissions").select("*").order("submitted_at", { ascending: false }),
         supabase.from("quiz_attempts").select("*, quizzes(subject, topic)").order("submitted_at", { ascending: false }),
         supabase.from("speaking_attempts").select("*, speaking_tasks(prompt, kind, target, speaking_sets(topic))").order("created_at", { ascending: false }),
         supabase.from("tests").select("*").order("test_date", { ascending: false }),
+        supabase.from("test_papers").select("*"),
+        supabase.from("test_submissions").select("*"),
       ]);
+      setTpapers(Object.fromEntries((tp.data ?? []).map((x) => [x.test_id, x as TP])));
+      setTans(Object.fromEntries((ta.data ?? []).map((x) => [x.test_id, x as TA])));
       setHws((h.data ?? []) as Hw[]); setSubs((s.data ?? []) as Sub[]); setQas((q.data ?? []) as unknown as QA[]);
       setSas((sp.data ?? []) as unknown as SA[]); setTests(((t.data ?? []) as T[]).filter((x) => x.test_date < new Date().toLocaleDateString("en-CA")));
       setLoaded(true);
@@ -136,11 +144,11 @@ export default function History() {
               <span className="ml-auto text-xs font-bold text-slate-500">{new Date(s.submitted_at).toLocaleDateString()}</span>
             </div>
             <h2 className="font-display font-extrabold text-lg">{h.title}</h2>
-            {h.file_paths.length > 0 && <div className="flex flex-wrap gap-2">{h.file_paths.map((p) => <Thumb key={p} path={p} label="Homework" />)}</div>}
+            <ThumbGrid paths={h.file_paths} label="Homework" title={h.title} />
             <div className="rounded-2xl bg-violet-50/70 border border-violet-100 p-3 space-y-2">
               <div className="text-sm font-extrabold">My answer</div>
               {s.note && <p className="text-sm">{s.note}</p>}
-              {s.file_paths.length > 0 ? <div className="flex flex-wrap gap-2">{s.file_paths.map((p, k) => <Thumb key={p} path={p} label={`Page ${k + 1}`} />)}</div> : !s.note && <p className="text-sm text-slate-400">No file</p>}
+              {s.file_paths.length > 0 ? <ThumbGrid paths={s.file_paths} label="Page" title={`My answer · ${h.title}`} /> : !s.note && <p className="text-sm text-slate-400">No file</p>}
             </div>
             {(s.marks !== null || s.comment) && <div className="rounded-xl bg-emerald-100 text-emerald-900 px-3 py-2 text-sm">{s.marks !== null && <b className="mr-2">⭐ {s.marks}</b>}{s.comment && <>👩‍🏫 “{s.comment}”</>}</div>}
           </article>
@@ -194,7 +202,10 @@ export default function History() {
               <div className="flex-1"><h2 className="font-display font-extrabold text-lg">{t.title}</h2>{t.syllabus && <p className="text-sm text-slate-600">📖 {t.syllabus}</p>}</div>
               {pct !== null && <Ring value={pct} max={100} size={72} stroke={9} from={pct >= 80 ? "#34d399" : pct >= 50 ? "#fbbf24" : "#fb7185"} to={pct >= 80 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#ef4444"}><div className="text-xs font-extrabold">{t.marks_obtained}/{t.max_marks}</div></Ring>}
             </div>
-            {t.file_paths.length > 0 && <div className="flex flex-wrap gap-2">{t.file_paths.map((p, k) => <Thumb key={p} path={p} label={`Paper ${k + 1}`} />)}</div>}
+            {t.syllabus_files.length > 0 && <div className="space-y-1"><div className="text-xs font-extrabold text-slate-500">📚 Syllabus</div><ThumbGrid paths={t.syllabus_files} label="Syllabus" title={`${t.title} · syllabus`} /></div>}
+            {tpapers[t.id] && <div className="space-y-1"><div className="text-xs font-extrabold text-slate-500">📄 Test paper</div><ThumbGrid paths={tpapers[t.id].file_paths} label="Paper" title={`${t.title} · test paper`} /></div>}
+            {tans[t.id] && <div className="space-y-1 rounded-2xl bg-violet-50/70 border border-violet-100 p-2.5"><div className="text-xs font-extrabold text-slate-500">✍️ My answer sheet · {new Date(tans[t.id].submitted_at).toLocaleDateString()}</div>{tans[t.id].file_paths.length > 0 && <ThumbGrid paths={tans[t.id].file_paths} label="Page" title={`My answer sheet · ${t.title}`} />}{tans[t.id].note && <p className="text-sm">{tans[t.id].note}</p>}</div>}
+            {t.file_paths.length > 0 && <div className="space-y-1"><div className="text-xs font-extrabold text-slate-500">✅ Checked paper</div><ThumbGrid paths={t.file_paths} label="Checked" title={`${t.title} · checked paper`} /></div>}
           </article>
         );
       }))}

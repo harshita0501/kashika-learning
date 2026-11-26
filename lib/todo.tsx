@@ -24,13 +24,19 @@ export function TodoProvider({ role, children }: { role: Role; children: React.R
     const counts = { homework: 0, quizzes: 0, speaking: 0, tests: 0, flashcards: 0 };
 
     if (role === "teacher") {
-      const [subs, qd, sd, att, fd] = await Promise.all([
+      const [subs, qd, sd, att, fd, tsubs, tdone] = await Promise.all([
         supabase.from("submissions").select("id").eq("status", "submitted"),
         supabase.from("quizzes").select("id").eq("status", "draft"),
         supabase.from("speaking_sets").select("id").eq("status", "draft"),
         supabase.from("speaking_attempts").select("id").is("teacher_score", null),
         supabase.from("flashcard_sets").select("id").eq("status", "draft"),
+        supabase.from("test_submissions").select("test_id, tests(subject, title, marks_obtained)"),
+        supabase.from("tests").select("id, subject, title, test_date").eq("test_date", t),
       ]);
+      const toMark = (tsubs.data ?? []).filter((x) => (x.tests as unknown as { marks_obtained: number | null } | null)?.marks_obtained === null);
+      counts.tests = toMark.length;
+      if (toMark.length) items.push({ href: "/tests", icon: "✍️", title: `${toMark.length} test answer sheet${toMark.length > 1 ? "s" : ""} to check`, sub: "Kashika has submitted her test" });
+      for (const x of tdone.data ?? []) items.push({ href: "/tests", icon: "📄", title: `${x.subject} test is today`, sub: "Upload the test paper so Kashika can start" });
       counts.flashcards = fd.data?.length ?? 0;
       counts.homework = subs.data?.length ?? 0;
       counts.quizzes = qd.data?.length ?? 0;
@@ -41,7 +47,7 @@ export function TodoProvider({ role, children }: { role: Role; children: React.R
       if (fd.data?.length) items.push({ href: "/flashcards", icon: "🃏", title: `${fd.data.length} flashcard set${fd.data.length > 1 ? "s" : ""} to review`, sub: "Review and assign to Kashika" });
       if (att.data?.length) items.push({ href: "/speaking", icon: "🎧", title: `${att.data.length} speaking recording${att.data.length > 1 ? "s" : ""} to listen to`, sub: "Check the AI marks and add yours" });
     } else {
-      const [hw, subs, qz, qa, ss, sa, ts, fs, fp] = await Promise.all([
+      const [hw, subs, qz, qa, ss, sa, ts, fs, fp, tpap, tsub, tact] = await Promise.all([
         supabase.from("homework").select("id, subject, title, due_date"),
         supabase.from("submissions").select("homework_id, status"),
         supabase.from("quizzes").select("id, subject, topic"),
@@ -51,7 +57,13 @@ export function TodoProvider({ role, children }: { role: Role; children: React.R
         supabase.from("tests").select("id, subject, title, test_date").gte("test_date", t).lte("test_date", addDays(3)).order("test_date"),
         supabase.from("flashcard_sets").select("id, topic, flashcards(id)"),
         supabase.from("flashcard_progress").select("card_id").eq("known", true),
+        supabase.from("test_papers").select("test_id"),
+        supabase.from("test_submissions").select("test_id"),
+        supabase.from("tests").select("id, subject, title").lte("test_date", t).is("marks_obtained", null),
       ]);
+      const submittedT = new Set((tsub.data ?? []).map((x) => x.test_id));
+      const paperT = new Set((tpap.data ?? []).map((x) => x.test_id));
+      for (const x of tact.data ?? []) if (paperT.has(x.id) && !submittedT.has(x.id)) items.unshift({ href: "/tests", icon: "📄", title: `Take your ${x.subject} test now!`, sub: `${x.title} — open the paper and upload your answers` });
       const done = new Set((subs.data ?? []).filter((x) => x.status !== "redo").map((x) => x.homework_id));
       const redo = new Set((subs.data ?? []).filter((x) => x.status === "redo").map((x) => x.homework_id));
       const pending = (hw.data ?? []).filter((h) => !done.has(h.id));
