@@ -37,3 +37,25 @@ export async function fileUrl(path: string) {
 }
 
 export const today = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD, local
+
+/** Current date and time in India (the paper opens by India time, whatever the device clock says). */
+export function istNow() {
+  const s = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Kolkata" }); // "2026-11-26 23:36:46"
+  return { date: s.slice(0, 10), time: s.slice(11, 16), stamp: s.slice(0, 16) };
+}
+/** "16:00:00" -> "4:00 PM" */
+export function fmtTime(t: string | null | undefined) {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+/** Minutes from now (India time) until date+time; negative when already past. */
+export function minutesUntil(date: string, time: string | null | undefined) {
+  const target = new Date(`${date}T${(time || "00:00").slice(0, 5)}:00+05:30`).getTime();
+  return Math.round((target - Date.now()) / 60000);
+}
+export function fmtCountdown(mins: number) {
+  if (mins <= 0) return "now";
+  const d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60), m = mins % 60;
+  return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m} min`;
+}

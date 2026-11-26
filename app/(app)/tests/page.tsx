@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { supabase, today, uploadFile } from "@/lib/supabase";
+import { supabase, istNow, uploadFile, fmtTime, minutesUntil, fmtCountdown } from "@/lib/supabase";
 import { useMe } from "@/lib/session";
 import { SUBJECTS, subjectMeta } from "@/lib/constants";
 import FileInput from "@/components/FileInput";
@@ -9,7 +9,7 @@ import { ThumbGrid } from "@/components/Thumb";
 import { Empty, ErrorBox, PageTitle, Ring, SubjectChip, Tabs } from "@/components/ui";
 import { useTodo } from "@/lib/todo";
 
-type T = { id: string; subject: string; title: string; test_date: string; syllabus: string; syllabus_files: string[]; marks_obtained: number | null; max_marks: number | null; file_paths: string[] };
+type T = { id: string; subject: string; title: string; test_date: string; test_time: string | null; paper_ready: boolean; syllabus: string; syllabus_files: string[]; marks_obtained: number | null; max_marks: number | null; file_paths: string[] };
 type Paper = { test_id: string; file_paths: string[]; note: string };
 type Ans = { test_id: string; file_paths: string[]; note: string; submitted_at: string };
 
@@ -26,6 +26,7 @@ export default function Tests() {
   const [paperEdit, setPaperEdit] = useState<string | null>(null);
   const [ansEdit, setAnsEdit] = useState<string | null>(null);
   const [keep, setKeep] = useState<string[]>([]);
+  const [tick, setTick] = useState(0); // re-check the clock every 20s so "Open" switches on by itself
 
   const load = useCallback(async () => {
     const [t, p, a] = await Promise.all([
@@ -38,6 +39,12 @@ export default function Tests() {
     setAnswers(Object.fromEntries((a.data ?? []).map((x) => [x.test_id, x as Ans])));
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { const id = setInterval(() => setTick((x) => x + 1), 15000); return () => clearInterval(id); }, []);
+  // when a test's time arrives, fetch the paper (it was hidden from Kashika until then)
+  useEffect(() => {
+    if (tick > 0 && tests.some((t) => t.paper_ready && !papers[t.id] && minutesUntil(t.test_date, t.test_time) <= 0)) load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tick]);
 
   const isTeacher = me.role === "teacher", isStudent = me.role === "student";
   const files = (f: FormData, name: string) => (f.getAll(name) as File[]).filter((x) => x.size);
@@ -50,7 +57,7 @@ export default function Tests() {
     try {
       const syllabus_files = await up(files(f, "syllabus_photos"), "tests");
       const { error } = await supabase.from("tests").insert({
-        subject: f.get("subject"), title: f.get("title"), test_date: f.get("date"), syllabus: f.get("syllabus"),
+        subject: f.get("subject"), title: f.get("title"), test_date: f.get("date"), test_time: f.get("time") || null, syllabus: f.get("syllabus"),
         max_marks: f.get("max") ? Number(f.get("max")) : null, syllabus_files,
       });
       if (error) throw error;
@@ -64,7 +71,7 @@ export default function Tests() {
     try {
       const added = await up(files(f, "syllabus_photos"), "tests");
       const { error } = await supabase.from("tests").update({
-        subject: f.get("subject"), title: f.get("title"), test_date: f.get("date"), syllabus: f.get("syllabus"),
+        subject: f.get("subject"), title: f.get("title"), test_date: f.get("date"), test_time: f.get("time") || null, syllabus: f.get("syllabus"),
         max_marks: f.get("max") ? Number(f.get("max")) : null, syllabus_files: [...keep, ...added],
       }).eq("id", t.id);
       if (error) throw error;
@@ -106,13 +113,16 @@ export default function Tests() {
       if (!file_paths.length) { setErr("Please add a photo or PDF of the test paper."); setBusy(null); return; }
       const { error } = await supabase.from("test_papers").upsert({ test_id: t.id, file_paths, note: (f.get("note") as string) ?? "" });
       if (error) throw error;
+      await supabase.from("tests").update({ paper_ready: true }).eq("id", t.id);
       setPaperEdit(null); load(); todo.refresh();
     } catch (x) { setErr((x as Error).message); }
     setBusy(null);
   }
   async function deletePaper(t: T) {
     if (!confirm("Remove the test paper?")) return;
-    await supabase.from("test_papers").delete().eq("test_id", t.id); load(); todo.refresh();
+    await supabase.from("test_papers").delete().eq("test_id", t.id);
+    await supabase.from("tests").update({ paper_ready: false }).eq("id", t.id);
+    load(); todo.refresh();
   }
   async function saveAnswer(t: T, e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); const f = new FormData(e.currentTarget);
@@ -136,13 +146,17 @@ export default function Tests() {
   }
   async function remove(id: string) { if (confirm("Delete this test (with its paper and answer sheet)?")) { await supabase.from("tests").delete().eq("id", id); load(); todo.refresh(); } }
 
-  const t0 = today();
+  const now = istNow();
+  const t0 = now.date;
+  void tick;
   const upcoming = tests.filter((t) => t.test_date >= t0).reverse();
   const past = tests.filter((t) => t.test_date < t0);
   const daysTo = (d: string) => Math.round((new Date(d).getTime() - new Date(t0).getTime()) / 86400000);
 
   const Card = (t: T, i: number) => {
-    const started = t.test_date <= t0;            // paper is visible to Kashika from the test date
+    const mins = minutesUntil(t.test_date, t.test_time);
+    const started = mins <= 0;                      // the paper opens at the test time (India time)
+    const at = `${t.test_date}${t.test_time ? " · " + fmtTime(t.test_time) : ""}`;
     const isPast = t.test_date < t0;
     const paper = papers[t.id], ans = answers[t.id];
     const pct = t.marks_obtained !== null && t.max_marks ? Math.round((t.marks_obtained / t.max_marks) * 100) : null;
@@ -156,7 +170,7 @@ export default function Tests() {
             <SubjectChip subject={t.subject} />
             {today_ ? <span className="chip bg-rose-500 text-white animate-pulse">🔥 Test day!</span>
               : !isPast && <span className={`chip ${daysTo(t.test_date) <= 1 ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>⏳ {daysTo(t.test_date) === 1 ? "Tomorrow" : `in ${daysTo(t.test_date)} days`}</span>}
-            <span className="ml-auto text-xs font-bold text-slate-500">📅 {t.test_date}</span>
+            <span className="ml-auto text-xs font-bold text-slate-500">📅 {t.test_date}{t.test_time ? ` · ⏰ ${fmtTime(t.test_time)}` : ""}</span>
           </div>
 
           {editId === t.id ? (
@@ -164,7 +178,8 @@ export default function Tests() {
               <div className="font-extrabold">✏️ Edit test</div>
               <select name="subject" defaultValue={t.subject} className="field">{SUBJECTS.map((x) => <option key={x}>{x}</option>)}</select>
               <input name="title" required defaultValue={t.title} className="field" />
-              <div className="flex gap-2"><input type="date" name="date" required defaultValue={t.test_date} className="field" /><input name="max" type="number" defaultValue={t.max_marks ?? ""} placeholder="Total marks" className="field !w-36" /></div>
+              <div className="flex gap-2"><input type="date" name="date" required defaultValue={t.test_date} className="field" /><input type="time" name="time" defaultValue={t.test_time?.slice(0, 5) ?? ""} className="field !w-36" title="Start time" /></div>
+              <input name="max" type="number" defaultValue={t.max_marks ?? ""} placeholder="Total marks" className="field" />
               <textarea name="syllabus" defaultValue={t.syllabus} placeholder="Syllabus / chapters" className="field" rows={2} />
               <FileKeeper paths={t.syllabus_files} keep={keep} setKeep={setKeep} label="Syllabus photos" />
               <FileInput name="syllabus_photos" multiple compact label="Add syllabus photos / PDF" />
@@ -191,7 +206,7 @@ export default function Tests() {
           {isTeacher ? (
             <div className="rounded-2xl bg-sky-50 border border-sky-200 p-3 space-y-2">
               <div className="font-extrabold text-sm">📄 Test paper {paper ? <span className="chip bg-emerald-100 text-emerald-800 ml-1">uploaded</span> : <span className="chip bg-slate-100 text-slate-600 ml-1">not uploaded</span>}</div>
-              <p className="text-xs text-slate-600">Upload it any time. Kashika can open it only from the test date ({t.test_date}){started ? " — it is open now." : "."}</p>
+              <p className="text-xs text-slate-600">Upload it any time. Kashika can open it only from <b>{at}</b> (India time){started ? " — it is open now." : ` — opens in ${fmtCountdown(mins)}.`}</p>
               {paper && paperEdit !== t.id && (<><ThumbGrid paths={paper.file_paths} label="Paper" title={`${t.title} · test paper`} />{paper.note && <p className="text-sm">📝 {paper.note}</p>}</>)}
               {paperEdit === t.id ? (
                 <form onSubmit={(e) => savePaper(t, e)} className="space-y-2">
@@ -208,7 +223,11 @@ export default function Tests() {
               )}
             </div>
           ) : !started ? (
-            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-3 text-sm font-bold text-slate-600">🔒 Your test paper will open on {t.test_date}. Revise well! 💪</div>
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-3 space-y-2">
+              <div className="font-extrabold text-sm">📄 Test paper {t.paper_ready ? <span className="chip bg-emerald-100 text-emerald-800 ml-1">ready ✓</span> : <span className="chip bg-slate-100 text-slate-600 ml-1">ma&apos;am will upload</span>}</div>
+              <button disabled className="btn btn-big bg-slate-200 text-slate-400 !shadow-none cursor-not-allowed">🔒 Open test paper</button>
+              <p className="text-xs text-center font-bold text-slate-500">Opens on {at} · in {fmtCountdown(mins)}</p>
+            </div>
           ) : (
             <div className="rounded-2xl bg-sky-50 border border-sky-200 p-3 space-y-2">
               <div className="font-extrabold text-sm">📄 Your test paper</div>
@@ -282,7 +301,9 @@ export default function Tests() {
           <form onSubmit={add} className="space-y-2.5 mt-3">
             <select name="subject" className="field">{SUBJECTS.map((s) => <option key={s}>{s}</option>)}</select>
             <input name="title" required placeholder="Test name (e.g. Unit Test 1)" className="field" />
-            <div className="flex gap-2"><input type="date" name="date" required className="field" /><input name="max" type="number" placeholder="Total marks" className="field !w-36" /></div>
+            <div className="flex gap-2"><input type="date" name="date" required className="field" /><input type="time" name="time" className="field !w-36" title="Start time" /></div>
+            <input name="max" type="number" placeholder="Total marks" className="field" />
+            <p className="text-xs text-slate-500 -mt-1">Start time: the paper becomes openable for Kashika at this time (India time). Leave it empty to open from the start of the day.</p>
             <textarea name="syllabus" placeholder="Syllabus / chapters (you can also add photos below)" className="field" rows={2} />
             <FileInput name="syllabus_photos" multiple compact label="Add syllabus photos / PDF (optional)" />
             <button disabled={busy === "add"} className="btn btn-primary btn-big">{busy === "add" ? "Adding…" : "Add test"}</button>
