@@ -15,6 +15,7 @@ export default function Tests() {
   const [err, setErr] = useState("");
   const [tab, setTab] = useState<"up" | "past">("up");
   const [busy, setBusy] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("tests").select("*").order("test_date", { ascending: false });
@@ -51,6 +52,20 @@ export default function Tests() {
     } catch (x) { setErr((x as Error).message); }
     setBusy(null);
   }
+  async function saveTest(t: T, e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const { error } = await supabase.from("tests").update({
+      subject: f.get("subject"), title: f.get("title"), test_date: f.get("date"), syllabus: f.get("syllabus"),
+      max_marks: f.get("max") ? Number(f.get("max")) : null,
+    }).eq("id", t.id);
+    if (error) setErr(error.message); else { setErr(""); setEditId(null); load(); }
+  }
+  async function removePaper(t: T, p: string) {
+    if (!confirm("Remove this photo?")) return;
+    await supabase.from("tests").update({ file_paths: t.file_paths.filter((x) => x !== p) }).eq("id", t.id);
+    load();
+  }
   async function remove(id: string) { if (confirm("Delete this test?")) { await supabase.from("tests").delete().eq("id", id); load(); } }
 
   const t0 = today();
@@ -71,6 +86,16 @@ export default function Tests() {
             {!isPast && <span className={`chip ${daysTo(t.test_date) <= 1 ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>⏳ {daysTo(t.test_date) === 0 ? "Today!" : daysTo(t.test_date) === 1 ? "Tomorrow" : `in ${daysTo(t.test_date)} days`}</span>}
             <span className="ml-auto text-xs font-bold text-slate-500">📅 {t.test_date}</span>
           </div>
+          {editId === t.id ? (
+            <form onSubmit={(e) => saveTest(t, e)} className="space-y-2.5 rounded-2xl bg-amber-50 border border-amber-200 p-3">
+              <div className="font-extrabold">✏️ Edit test</div>
+              <select name="subject" defaultValue={t.subject} className="field">{SUBJECTS.map((x) => <option key={x}>{x}</option>)}</select>
+              <input name="title" required defaultValue={t.title} className="field" />
+              <div className="flex gap-2"><input type="date" name="date" required defaultValue={t.test_date} className="field" /><input name="max" type="number" defaultValue={t.max_marks ?? ""} placeholder="Total marks" className="field !w-36" /></div>
+              <textarea name="syllabus" defaultValue={t.syllabus} placeholder="Syllabus / chapters" className="field" rows={2} />
+              <div className="flex gap-2"><button className="btn btn-primary flex-1">Save changes</button><button type="button" onClick={() => setEditId(null)} className="btn btn-ghost">Cancel</button></div>
+            </form>
+          ) : (
           <div className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <h2 className="font-display font-extrabold text-xl leading-snug">{t.title}</h2>
@@ -82,8 +107,12 @@ export default function Tests() {
               </Ring>
             )}
           </div>
+          )}
           {isPast && pct === null && <p className="text-sm font-bold text-slate-400">Marks not added yet</p>}
-          {t.file_paths.length > 0 && <div className="flex flex-wrap gap-2">{t.file_paths.map((p, k) => <Thumb key={p} path={p} label={`Paper ${k + 1}`} />)}</div>}
+          {t.file_paths.length > 0 && <div className="flex flex-wrap gap-3">{t.file_paths.map((p, k) => (
+            <div key={p} className="relative"><Thumb path={p} label={`Paper ${k + 1}`} />
+              {me.role === "teacher" && <button onClick={() => removePaper(t, p)} className="absolute -top-2 -right-2 size-7 rounded-full bg-rose-500 text-white text-sm font-extrabold shadow" title="Remove photo">✕</button>}
+            </div>))}</div>}
 
           {me.role === "teacher" && isPast && (
             <div className="space-y-2 border-t border-dashed border-violet-200 pt-3">
@@ -98,7 +127,12 @@ export default function Tests() {
               </form>
             </div>
           )}
-          {me.role === "teacher" && <button onClick={() => remove(t.id)} className="text-xs font-bold text-rose-500">Delete test</button>}
+          {me.role === "teacher" && editId !== t.id && (
+            <div className="flex gap-2">
+              <button onClick={() => setEditId(t.id)} className="btn btn-soft !py-1.5 text-sm">✏️ Edit</button>
+              <button onClick={() => remove(t.id)} className="btn btn-ghost !py-1.5 text-sm !text-rose-600">🗑 Delete</button>
+            </div>
+          )}
         </div>
       </article>
     );

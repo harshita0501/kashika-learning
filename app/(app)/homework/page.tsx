@@ -5,6 +5,7 @@ import { useMe } from "@/lib/session";
 import { SUBJECTS, subjectMeta } from "@/lib/constants";
 import FileInput from "@/components/FileInput";
 import Thumb from "@/components/Thumb";
+import FileKeeper from "@/components/FileKeeper";
 import { Empty, ErrorBox, PageTitle, SubjectChip, Tabs } from "@/components/ui";
 import { useTodo } from "@/lib/todo";
 
@@ -25,8 +26,11 @@ export default function Homework() {
   const [subs, setSubs] = useState<Record<string, Sub>>({});
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [tab, setTab] = useState<"todo" | "done" | "all">("todo");
+  const [tab, setTab] = useState<"todo" | "open" | "done" | "all">("todo");
   const [subject, setSubject] = useState<string>("All");
+  const [editHw, setEditHw] = useState<string | null>(null); // homework being edited by ma'am
+  const [editAns, setEditAns] = useState<string | null>(null); // homework whose answer Kashika is editing
+  const [keep, setKeep] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     const [h, s] = await Promise.all([
@@ -42,9 +46,10 @@ export default function Homework() {
   const stateOf = (h: Hw) => subs[h.id]?.status ?? "pending";
   // teacher: "To check" = submitted/redo-resubmitted; "Done" = checked. Student: To do = pending/redo.
   const inTodo = (h: Hw) => (isTeacher ? stateOf(h) === "submitted" : ["pending", "redo"].includes(stateOf(h)));
+  const inOpen = (h: Hw) => ["pending", "redo"].includes(stateOf(h)); // given, waiting for Kashika
   const inDone = (h: Hw) => (isTeacher ? stateOf(h) === "checked" : ["submitted", "checked"].includes(stateOf(h)));
 
-  const shown = useMemo(() => hws.filter((h) => (subject === "All" || h.subject === subject) && (tab === "all" || (tab === "todo" ? inTodo(h) : inDone(h)))),
+  const shown = useMemo(() => hws.filter((h) => (subject === "All" || h.subject === subject) && (tab === "all" || (tab === "todo" ? inTodo(h) : tab === "open" ? inOpen(h) : inDone(h)))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [hws, subs, tab, subject, isTeacher]);
 
@@ -61,7 +66,7 @@ export default function Homework() {
         due_date: f.get("due") || null, file_paths, file_path: file_paths[0] ?? null,
       });
       if (error) throw error;
-      form.reset(); load(); todo.refresh();
+      form.reset(); setTab("open"); setSubject("All"); load(); todo.refresh();
     } catch (x) { setErr((x as Error).message); }
     setBusy(null);
   }
@@ -73,14 +78,48 @@ export default function Homework() {
     try {
       const files = (f.getAll("file") as File[]).filter((x) => x.size);
       const existing = subs[hw.id];
-      const file_paths = files.length ? await Promise.all(files.map((x) => uploadFile(x, "answers"))) : existing?.file_paths ?? [];
-      if (!file_paths.length && !f.get("note")) { setErr("Please add a photo/file or a note."); setBusy(null); return; }
+      const added = await Promise.all(files.map((x) => uploadFile(x, "answers")));
+      const file_paths = [...(existing ? keep : []), ...added];
+      if (!file_paths.length && !(f.get("note") as string).trim()) { setErr("Please add a photo/file or a note."); setBusy(null); return; }
       const row = { homework_id: hw.id, file_paths, file_path: file_paths[0] ?? null, note: f.get("note") as string, status: "submitted", submitted_at: new Date().toISOString() };
       const { error } = existing ? await supabase.from("submissions").update(row).eq("id", existing.id) : await supabase.from("submissions").insert(row);
       if (error) throw error;
-      load(); todo.refresh();
+      setEditAns(null); load(); todo.refresh();
     } catch (x) { setErr((x as Error).message); }
     setBusy(null);
+  }
+
+  async function deleteAnswer(s: Sub) {
+    if (!confirm("Delete my answer? You can submit it again later.")) return;
+    const { error } = await supabase.from("submissions").delete().eq("id", s.id);
+    if (error) { setErr(error.message); return; }
+    setEditAns(null); load(); todo.refresh();
+  }
+
+  async function saveHomework(h: Hw, e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    setErr(""); setBusy(h.id);
+    try {
+      const files = (f.getAll("file") as File[]).filter((x) => x.size);
+      const added = await Promise.all(files.map((x) => uploadFile(x, "homework")));
+      const file_paths = [...keep, ...added];
+      const { error } = await supabase.from("homework").update({
+        subject: f.get("subject"), title: f.get("title"), description: f.get("description"),
+        due_date: f.get("due") || null, file_paths, file_path: file_paths[0] ?? null,
+      }).eq("id", h.id);
+      if (error) throw error;
+      setEditHw(null); load(); todo.refresh();
+    } catch (x) { setErr((x as Error).message); }
+    setBusy(null);
+  }
+
+  async function deleteHomework(h: Hw) {
+    const has = !!subs[h.id];
+    if (!confirm(`Delete "${h.title}"?${has ? "\n\nKashika's answer and your marks for it will also be deleted." : ""}`)) return;
+    const { error } = await supabase.from("homework").delete().eq("id", h.id);
+    if (error) { setErr(error.message); return; }
+    load(); todo.refresh();
   }
 
   async function check(sub: Sub, form: HTMLFormElement, status: "checked" | "redo") {
@@ -90,7 +129,7 @@ export default function Homework() {
     load(); todo.refresh();
   }
 
-  const counts = { todo: hws.filter(inTodo).length, done: hws.filter(inDone).length };
+  const counts = { todo: hws.filter(inTodo).length, open: hws.filter(inOpen).length };
 
   return (
     <div className="space-y-4">
@@ -111,9 +150,14 @@ export default function Homework() {
         </details>
       )}
 
-      <Tabs value={tab} onChange={setTab} tabs={[
-        { id: "todo", label: isTeacher ? "To check" : "To do", count: counts.todo },
-        { id: "done", label: isTeacher ? "Checked" : "Done" },
+      <Tabs value={tab} onChange={setTab} tabs={isTeacher ? [
+        { id: "todo", label: "To check", count: counts.todo },
+        { id: "open", label: "Given", count: counts.open },
+        { id: "done", label: "Checked" },
+        { id: "all", label: "All" },
+      ] : [
+        { id: "todo", label: "To do", count: counts.todo },
+        { id: "done", label: "Done" },
         { id: "all", label: "All" },
       ]} />
       <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -124,7 +168,7 @@ export default function Homework() {
         ))}
       </div>
 
-      {shown.length === 0 && <Empty emoji={tab === "todo" ? "🎉" : "📭"} title={tab === "todo" ? (isTeacher ? "Nothing to check!" : "No homework pending!") : "Nothing here yet"} sub={tab === "todo" ? "Enjoy your free time ✨" : "Switch the tab or subject to see more"} />}
+      {shown.length === 0 && <Empty emoji={tab === "todo" ? "🎉" : "📭"} title={tab === "todo" ? (isTeacher ? "Nothing to check!" : "No homework pending!") : tab === "open" ? "No homework waiting for Kashika" : "Nothing here yet"} sub={tab === "todo" ? "Enjoy your free time ✨" : "Switch the tab or subject to see more"} />}
 
       {shown.map((h, idx) => {
         const s = subs[h.id];
@@ -140,9 +184,33 @@ export default function Homework() {
                 <span className={`chip ${st.cls}`}>{st.label}</span>
                 {h.due_date && <span className={`chip ml-auto ${late ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600"}`}>📅 {h.due_date}{late ? " · late" : ""}</span>}
               </div>
-              <h2 className="font-display font-extrabold text-xl leading-snug">{h.title}</h2>
-              {h.description && <p className="text-sm text-slate-600 whitespace-pre-wrap">{h.description}</p>}
-              {h.file_paths.length > 0 && <div className="flex flex-wrap gap-2">{h.file_paths.map((p) => <Thumb key={p} path={p} label="Homework" />)}</div>}
+              {editHw === h.id ? (
+                <form onSubmit={(e) => saveHomework(h, e)} className="space-y-2.5 rounded-2xl bg-amber-50 border border-amber-200 p-3">
+                  <div className="font-extrabold">✏️ Edit homework</div>
+                  <select name="subject" defaultValue={h.subject} className="field">{SUBJECTS.map((x) => <option key={x}>{x}</option>)}</select>
+                  <input name="title" required defaultValue={h.title} className="field" />
+                  <textarea name="description" defaultValue={h.description} placeholder="Instructions (optional)" className="field" rows={2} />
+                  <label className="block text-sm font-bold">Due date <input type="date" name="due" defaultValue={h.due_date ?? ""} className="field !w-auto ml-2" /></label>
+                  <FileKeeper paths={h.file_paths} keep={keep} setKeep={setKeep} label="Files" />
+                  <FileInput name="file" multiple label="Add more photos / files" />
+                  <div className="flex gap-2">
+                    <button disabled={busy === h.id} className="btn btn-primary flex-1">{busy === h.id ? "Saving…" : "Save changes"}</button>
+                    <button type="button" onClick={() => setEditHw(null)} className="btn btn-ghost">Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <h2 className="font-display font-extrabold text-xl leading-snug">{h.title}</h2>
+                  {h.description && <p className="text-sm text-slate-600 whitespace-pre-wrap">{h.description}</p>}
+                  {h.file_paths.length > 0 && <div className="flex flex-wrap gap-2">{h.file_paths.map((p) => <Thumb key={p} path={p} label="Homework" />)}</div>}
+                  {isTeacher && (
+                    <div className="flex gap-2">
+                      <button onClick={() => { setEditHw(h.id); setKeep(h.file_paths); }} className="btn btn-soft !py-1.5 text-sm">✏️ Edit</button>
+                      <button onClick={() => deleteHomework(h)} className="btn btn-ghost !py-1.5 text-sm !text-rose-600">🗑 Delete</button>
+                    </div>
+                  )}
+                </>
+              )}
 
               {s && (
                 <div className="rounded-2xl bg-violet-50/70 border border-violet-100 p-3 space-y-2">
@@ -159,11 +227,21 @@ export default function Homework() {
                 </div>
               )}
 
-              {me.role === "student" && (!s || s.status !== "checked") && (
+              {me.role === "student" && s && s.status !== "checked" && editAns !== h.id && (
+                <div className="flex gap-2">
+                  <button onClick={() => { setEditAns(h.id); setKeep(s.file_paths); }} className="btn btn-soft flex-1 !py-2 text-sm">✏️ Edit my answer</button>
+                  <button onClick={() => deleteAnswer(s)} className="btn btn-ghost !py-2 text-sm !text-rose-600">🗑 Delete</button>
+                </div>
+              )}
+              {me.role === "student" && (!s || (s.status !== "checked" && editAns === h.id)) && (
                 <form onSubmit={(e) => submitAnswer(h, e)} className="space-y-2.5 border-t border-dashed border-violet-200 pt-3">
-                  <FileInput name="file" multiple color="green" label="Add photo of your answer" />
+                  {s && <FileKeeper paths={s.file_paths} keep={keep} setKeep={setKeep} label="My pages (tap ✕ to remove one)" />}
+                  <FileInput name="file" multiple color="green" label={s ? "Add more pages" : "Add photo of your answer"} />
                   <input name="note" placeholder="Note for ma'am (optional)" defaultValue={s?.note} className="field" />
-                  <button disabled={busy === h.id} className="btn btn-green btn-big">{busy === h.id ? "Sending…" : s ? "Submit again" : "✅ Submit answer"}</button>
+                  <div className="flex gap-2">
+                    <button disabled={busy === h.id} className="btn btn-green btn-big flex-1">{busy === h.id ? "Sending…" : s ? "💾 Save changes" : "✅ Submit answer"}</button>
+                    {s && <button type="button" onClick={() => setEditAns(null)} className="btn btn-ghost">Cancel</button>}
+                  </div>
                 </form>
               )}
 
