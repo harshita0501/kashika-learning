@@ -1,12 +1,15 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { supabase, uploadFile } from "@/lib/supabase";
+import FileInput from "@/components/FileInput";
 import { useMe } from "@/lib/session";
 import { SUBJECTS, subjectMeta } from "@/lib/constants";
 import type { Quiz, Attempt } from "@/lib/quiz";
 import { Empty, ErrorBox, PageTitle, SubjectChip, Tabs } from "@/components/ui";
 import { useTodo } from "@/lib/todo";
+import { useChapters } from "@/lib/chapters";
+import ChapterSelect from "@/components/ChapterSelect";
 
 const PLACEHOLDER: Record<string, string> = {
   Hindi: "e.g. vilom shabd / matraen", English: "e.g. prepositions, articles", EVS: "e.g. road transport", Maths: "e.g. division", Science: "e.g. solar system",
@@ -18,6 +21,9 @@ export default function Quizzes() {
   const [quizzes, setQuizzes] = useState<(Quiz & { n: number })[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [topics, setTopics] = useState<Record<string, string>>({});
+  const [chap, setChap] = useState<Record<string, string>>({});
+  const chapters = useChapters();
+  const [formKey, setFormKey] = useState(0);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string }[]>([]);
   const [err, setErr] = useState("");
@@ -37,11 +43,17 @@ export default function Quizzes() {
     e.preventDefault();
     setBusy(true); setErr(""); setMsg([]);
     try {
-      const res = await fetch("/api/quiz/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topics }) });
+      const fd = new FormData(e.currentTarget as HTMLFormElement);
+      const photos: Record<string, string[]> = {};
+      for (const s of SUBJECTS) {
+        const files = (fd.getAll("photos_" + s) as File[]).filter((x) => x.size);
+        if (files.length) photos[s] = await Promise.all(files.map((x) => uploadFile(x, "sources")));
+      }
+      const res = await fetch("/api/quiz/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topics, chapters: chap, photos }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "Something went wrong");
       setMsg(j.results.map((r: { subject: string; ok: boolean; count?: number; error?: string }) => ({ ok: r.ok, text: r.ok ? `${r.subject}: ${r.count} questions ready for review` : `${r.subject}: ${r.error}` })));
-      setTopics({}); load(); todo.refresh();
+      setTopics({}); setChap({}); setFormKey((k) => k + 1); load(); todo.refresh();
     } catch (x) { setErr((x as Error).message); }
     setBusy(false);
   }
@@ -57,14 +69,18 @@ export default function Quizzes() {
       <PageTitle emoji="🧠" title="Weekly Quizzes" sub={isTeacher ? "Make, review and assign" : "Test your brain!"} />
 
       {isTeacher && (
-        <form onSubmit={generate} className="card p-4 space-y-2.5 fade-up">
+        <form key={formKey} onSubmit={generate} className="card p-4 space-y-2.5 fade-up">
           <h2 className="font-display font-extrabold text-xl">✨ Make this week&apos;s quizzes</h2>
-          <p className="text-sm text-slate-600">Write a topic for each subject (leave blank to skip). The AI drafts the quiz and you review it before giving it to Kashika.</p>
+          <p className="text-sm text-slate-600">For each subject write a topic, pick a book chapter, or upload photos of the pages (any mix). Leave a subject empty to skip it. The AI drafts the quiz and you review it before giving it to Kashika.</p>
           {SUBJECTS.map((s) => (
-            <label key={s} className="flex items-center gap-2">
-              <span className={`chip w-24 justify-center ${subjectMeta(s).chip}`}>{subjectMeta(s).icon} {s}</span>
-              <input value={topics[s] ?? ""} onChange={(e) => setTopics({ ...topics, [s]: e.target.value })} placeholder={PLACEHOLDER[s]} className="field" disabled={busy} />
-            </label>
+            <div key={s} className="space-y-1.5 rounded-2xl bg-violet-50/50 border border-violet-100 p-2.5">
+              <div className="flex items-center gap-2">
+                <span className={`chip w-24 justify-center ${subjectMeta(s).chip}`}>{subjectMeta(s).icon} {s}</span>
+                <input value={topics[s] ?? ""} onChange={(e) => setTopics({ ...topics, [s]: e.target.value })} placeholder={PLACEHOLDER[s]} className="field" disabled={busy} />
+              </div>
+              <ChapterSelect chapters={chapters} subject={s} value={chap[s] ?? ""} onChange={(v) => setChap({ ...chap, [s]: v })} disabled={busy} />
+              <FileInput name={"photos_" + s} multiple compact disabled={busy} label="Or upload photos / PDF of the pages" />
+            </div>
           ))}
           <button disabled={busy} className="btn btn-primary btn-big">{busy ? "🪄 Making quizzes… (about a minute)" : "🪄 Create quizzes"}</button>
           {err && <ErrorBox>{err}</ErrorBox>}

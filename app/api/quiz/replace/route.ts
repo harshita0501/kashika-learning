@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { teacherClient } from "@/lib/supabase-server";
 import { generateQuestions } from "@/lib/quiz-ai";
+import { loadSource } from "@/lib/book-source";
 
 export const maxDuration = 60;
 
@@ -14,12 +15,13 @@ export async function POST(req: Request) {
 
   const { data: q } = await supabase.from("quiz_questions").select("id, quiz_id, position").eq("id", question_id).single();
   if (!q) return NextResponse.json({ error: "Question not found." }, { status: 404 });
-  const { data: quiz } = await supabase.from("quizzes").select("subject, topic").eq("id", q.quiz_id).single();
+  const { data: quiz } = await supabase.from("quizzes").select("subject, topic, chapter_id, source_paths").eq("id", q.quiz_id).single();
   const { data: others } = await supabase.from("quiz_questions").select("prompt").eq("quiz_id", q.quiz_id);
   if (!quiz) return NextResponse.json({ error: "Quiz not found." }, { status: 404 });
 
   try {
-    const [n] = await generateQuestions(quiz.subject, quiz.topic, 1, (others ?? []).map((o) => o.prompt));
+    const source = await loadSource(supabase, quiz.chapter_id, quiz.source_paths ?? [], quiz.topic);
+    const [n] = await generateQuestions(quiz.subject, quiz.topic, 1, (others ?? []).map((o) => o.prompt), source);
     if (!n) throw new Error("Could not make a new question. Please try again.");
     const { error } = await supabase.from("quiz_questions").update({ type: n.type, prompt: n.prompt, options: n.options, answer: n.answer, explanation: n.explanation }).eq("id", q.id);
     if (error) throw error;

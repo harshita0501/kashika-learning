@@ -2,10 +2,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase, uploadFile } from "@/lib/supabase";
+import FileInput from "@/components/FileInput";
 import { useMe } from "@/lib/session";
 import { Empty, ErrorBox, PageTitle } from "@/components/ui";
 import { useTodo } from "@/lib/todo";
+import { useChapters } from "@/lib/chapters";
+import ChapterSelect from "@/components/ChapterSelect";
 
 type SetRow = { id: string; topic: string; week_start: string; status: "draft" | "assigned"; speaking_tasks: { id: string }[] };
 type Att = { task_id: string; ai_score: number | null; teacher_score: number | null; created_at: string };
@@ -17,6 +20,8 @@ export default function Speaking() {
   const [sets, setSets] = useState<SetRow[]>([]);
   const [atts, setAtts] = useState<Att[]>([]);
   const [topic, setTopic] = useState("");
+  const [chapter, setChapter] = useState("");
+  const chapters = useChapters();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -34,7 +39,9 @@ export default function Speaking() {
     e.preventDefault();
     setBusy(true); setErr("");
     try {
-      const res = await fetch("/api/speaking/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic }) });
+      const files = ((new FormData(e.currentTarget as HTMLFormElement)).getAll("photos") as File[]).filter((x) => x.size);
+      const photos = await Promise.all(files.map((x) => uploadFile(x, "sources")));
+      const res = await fetch("/api/speaking/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic, chapter_id: chapter || undefined, photos }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "Something went wrong");
       todo.refresh(); router.push(`/speaking/${j.id}`);
@@ -61,6 +68,8 @@ export default function Speaking() {
           <h2 className="font-display font-extrabold text-xl">✨ Make speaking practice</h2>
           <p className="text-sm text-gray-600">Write a topic (optional) like &quot;My family&quot; or &quot;Animals&quot;. Leave it blank and the AI will pick one. You will review the tasks before giving them to Kashika.</p>
           <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Topic (optional)" className="field" disabled={busy} />
+          <ChapterSelect chapters={chapters} subject="English" value={chapter} onChange={setChapter} disabled={busy} />
+          <FileInput name="photos" multiple compact disabled={busy} label="Or upload photos / PDF of the pages" />
           <button disabled={busy} className="btn btn-primary btn-big">{busy ? "🪄 Making tasks…" : "🪄 Create speaking tasks"}</button>
           {err && <ErrorBox>{err}</ErrorBox>}
         </form>

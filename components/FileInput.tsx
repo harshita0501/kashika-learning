@@ -3,8 +3,8 @@ import { useRef, useState } from "react";
 
 /** Big, obvious upload area: tap to take a photo / choose files; shows what was picked. Works inside <form> (name is submitted). */
 export default function FileInput({
-  name = "file", label = "Add photo or file", multiple = false, accept = "image/*,application/pdf", color = "indigo",
-}: { name?: string; label?: string; multiple?: boolean; accept?: string; color?: "indigo" | "green" }) {
+  name = "file", label = "Add photo or file", multiple = false, accept = "image/*,application/pdf", color = "indigo", compact = false, disabled = false,
+}: { name?: string; label?: string; multiple?: boolean; accept?: string; color?: "indigo" | "green"; compact?: boolean; disabled?: boolean }) {
   const ref = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
 
@@ -20,13 +20,19 @@ export default function FileInput({
   return (
     <div className="space-y-2">
       <input ref={ref} type="file" name={name} accept={accept} multiple={multiple} onChange={onChange} className="hidden" />
+      {compact ? (
+        <button type="button" disabled={disabled} onClick={() => ref.current?.click()} className="w-full rounded-2xl border-2 border-dashed border-violet-300 bg-violet-50/60 px-3 py-2 text-sm font-extrabold text-violet-700 active:scale-[.98] transition disabled:opacity-50">
+          📷 {files.length ? `${files.length} file${files.length > 1 ? "s" : ""} selected — change` : label}
+        </button>
+      ) : (
       <button type="button" onClick={() => ref.current?.click()}
         className={`w-full border-[3px] border-dashed rounded-3xl py-6 px-4 flex flex-col items-center gap-1 active:scale-[.98] hover:brightness-95 transition ${tone}`}>
         <span className="text-4xl float">📷</span>
         <span className="font-display font-extrabold text-lg">{files.length ? "Change / add more" : label}</span>
         <span className="text-xs opacity-80">{multiple ? "You can choose more than one page" : "Tap to choose"}</span>
       </button>
-      {files.length > 0 && (
+      )}
+      {!compact && files.length > 0 && (
         <ul className="space-y-1">
           {files.map((f, i) => (
             <li key={i} className="flex items-center gap-2 bg-white border border-violet-100 rounded-2xl px-3 py-2 text-sm pop">

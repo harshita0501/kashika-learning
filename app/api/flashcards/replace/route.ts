@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { teacherClient } from "@/lib/supabase-server";
 import { generateCards } from "@/lib/flashcards-ai";
+import { loadSource } from "@/lib/book-source";
 
 export const maxDuration = 60;
 
@@ -13,11 +14,12 @@ export async function POST(req: Request) {
   const { data: c } = await supabase.from("flashcards").select("id, set_id").eq("id", card_id).single();
   if (!c) return NextResponse.json({ error: "Card not found." }, { status: 404 });
   const [{ data: set }, { data: others }] = await Promise.all([
-    supabase.from("flashcard_sets").select("topic").eq("id", c.set_id).single(),
+    supabase.from("flashcard_sets").select("topic, chapter_id, source_paths").eq("id", c.set_id).single(),
     supabase.from("flashcards").select("word").eq("set_id", c.set_id),
   ]);
   try {
-    const out = await generateCards(set?.topic ?? "", 1, (others ?? []).map((o) => o.word));
+    const source = await loadSource(supabase, set?.chapter_id, set?.source_paths ?? [], set?.topic ?? "");
+    const out = await generateCards(set?.topic ?? "", 1, (others ?? []).map((o) => o.word), source);
     const n = out.cards[0];
     if (!n) throw new Error("Could not make a new card. Please try again.");
     const { error } = await supabase.from("flashcards").update(n).eq("id", c.id);

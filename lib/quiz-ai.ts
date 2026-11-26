@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { withSource, type ChapterSource } from "./book-source";
 
 const MODEL = process.env.QUIZ_MODEL || "claude-opus-5-5";
 
@@ -62,9 +63,9 @@ function clean(raw: z.infer<typeof Q>): DraftQuestion | null {
   return { type: "match", prompt, options: { left: p.map((x) => x.left.trim()), right }, answer, explanation };
 }
 
-export async function generateQuestions(subject: string, topic: string, count: number, avoid: string[] = []): Promise<DraftQuestion[]> {
+export async function generateQuestions(subject: string, topic: string, count: number, avoid: string[] = [], source?: ChapterSource | null): Promise<DraftQuestion[]> {
   const client = new Anthropic();
-  const user = `Subject: ${subject}\nTopic this week: ${topic}\nWrite ${count} question${count > 1 ? "s" : ""}.` +
+  const user = `Subject: ${subject}\nTopic this week: ${topic || source?.title || ""}\nWrite ${count} question${count > 1 ? "s" : ""}.` +
     (avoid.length ? `\n\nDo not repeat or closely resemble these existing questions:\n${avoid.map((a) => "- " + a).join("\n")}` : "");
 
   const res = await client.beta.messages.parse({
@@ -74,7 +75,7 @@ export async function generateQuestions(subject: string, topic: string, count: n
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
     output_config: { effort: "low", format: zodOutputFormat(Out) },
-    messages: [{ role: "user", content: user }],
+    messages: [{ role: "user", content: withSource(user, source) as never }],
   });
 
   if (res.stop_reason === "refusal" || !res.parsed_output) {
