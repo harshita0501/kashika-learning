@@ -15,6 +15,12 @@ Stack: Next.js + Supabase (login, database, file storage), hosted on Vercel. All
 2. **Local**: `cp .env.example .env.local`, fill both values, `npm install`, `npm run dev`.
 3. **Vercel** (vercel.com) → import this repo → add the same two env vars → Deploy.
 
+## V2 — Weekly AI quiz
+Ma'am types one topic per subject → Claude drafts an 8-question quiz per subject (MCQ / fill-in-the-blank / match, chosen per question; Hindi quiz in Hindi) → ma'am reviews (remove / replace a question) → **Assign** → Kashika attempts it and gets her score.
+
+Setup: run `supabase/v2_quizzes.sql` in the Supabase SQL editor, and add `ANTHROPIC_API_KEY` (from console.anthropic.com) to `.env.local` and to the Vercel project's environment variables, then redeploy.
+
+Note: answer keys of *assigned* quizzes are readable by the student's browser (fine for a home practice app).
+
 ## Roadmap
-- V2: weekly auto quiz (ma'am gives topics → AI drafts → ma'am reviews → assign)
 - V3: English speaking quiz with voice notes

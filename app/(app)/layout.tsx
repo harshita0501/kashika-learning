@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -9,10 +9,11 @@ const NAV = [
   { href: "/", label: "Home", icon: "🏠" },
   { href: "/attendance", label: "Attendance", icon: "📅" },
   { href: "/homework", label: "Homework", icon: "📝" },
+  { href: "/quizzes", label: "Quizzes", icon: "🧠" },
   { href: "/tests", label: "Tests", icon: "🏆" },
 ];
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+function Shell({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const path = usePathname();
 
@@ -47,12 +48,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {nav.map((n) => (
             <Link key={n.href} href={n.href}
               className={`flex flex-col md:flex-row md:gap-2 items-center px-3 py-2 text-xs md:text-sm md:rounded-full ${
-                path === n.href ? "text-indigo-600 font-bold md:bg-indigo-100" : "text-gray-500"}`}>
+                (n.href === "/" ? path === "/" : path.startsWith(n.href)) ? "text-indigo-600 font-bold md:bg-indigo-100" : "text-gray-500"}`}>
               <span className="text-xl md:text-base">{n.icon}</span>{n.label}
             </Link>
           ))}
         </nav>
       </div>
     </SessionProvider>
+  );
+}
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-500">Loading…</div>}>
+      <Shell>{children}</Shell>
+    </Suspense>
   );
 }
