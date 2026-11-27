@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   const { data: set } = await supabase.from("speaking_sets").select("topic, chapter_id, source_paths").eq("id", set_id).single();
   if (!set) return NextResponse.json({ error: "Set not found." }, { status: 404 });
   const { data: have } = await supabase.from("speaking_tasks").select("prompt, position").eq("set_id", set_id);
-  if ((have?.length ?? 0) + n > 12) return NextResponse.json({ error: "A speaking set can have at most 12 tasks." }, { status: 400 });
+  if ((have?.length ?? 0) + n > 20) return NextResponse.json({ error: "A speaking set can have at most 20 tasks." }, { status: 400 });
   try {
     const source = await loadSource(supabase, set.chapter_id, set.source_paths ?? [], set.topic);
     const out = await generateTasks(set.topic, n, (have ?? []).map((h) => h.prompt), undefined, source);

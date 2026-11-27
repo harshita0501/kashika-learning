@@ -21,7 +21,7 @@ export default function Speaking() {
   const [atts, setAtts] = useState<Att[]>([]);
   const [topic, setTopic] = useState("");
   const [chapter, setChapter] = useState("");
-  const [count, setCount] = useState(4);
+  const [count, setCount] = useState(8);
   const chapters = useChapters();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -72,7 +72,7 @@ export default function Speaking() {
           <ChapterSelect chapters={chapters} subject="English" value={chapter} onChange={setChapter} disabled={busy} />
           <FileInput name="photos" multiple compact disabled={busy} label="Or upload photos / PDF of the pages" />
           <label className="flex items-center gap-2 text-sm font-extrabold">How many tasks
-            <select value={count} onChange={(e) => setCount(Number(e.target.value))} disabled={busy} className="field !w-auto !py-1.5">{[2, 3, 4, 5, 6, 8].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
+            <select value={count} onChange={(e) => setCount(Number(e.target.value))} disabled={busy} className="field !w-auto !py-1.5">{[8, 10, 12].map((n) => <option key={n} value={n}>{n}</option>)}</select> <span className="text-xs font-semibold text-slate-500">(at least 8 · add or delete later)</span></label>
           <button disabled={busy} className="btn btn-primary btn-big">{busy ? "🪄 Making tasks…" : "🪄 Create speaking tasks"}</button>
           {err && <ErrorBox>{err}</ErrorBox>}
         </form>

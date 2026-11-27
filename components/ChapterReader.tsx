@@ -1,9 +1,19 @@
 "use client";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { fileUrl } from "@/lib/supabase";
+import Lightbox from "./Lightbox";
 
 /** Full-screen reader for a chapter's files (PDF in a frame, photos as images). */
-export default function ChapterReader({ title, paths, onClose }: { title: string; paths: string[]; onClose: () => void }) {
+/** Photos open in the zoomable viewer; PDFs open in a frame. */
+export default function ChapterReader(props: { title: string; paths: string[]; onClose: () => void }) {
+  const photosOnly = props.paths.length > 0 && props.paths.every((p) => !p.toLowerCase().endsWith(".pdf"));
+  return photosOnly ? <Lightbox paths={props.paths} title={`📖 ${props.title}`} onClose={props.onClose} /> : <PdfReader {...props} />;
+}
+
+function PdfReader({ title, paths, onClose }: { title: string; paths: string[]; onClose: () => void }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [urls, setUrls] = useState<(string | null)[]>([]);
   const [i, setI] = useState(0);
   useEffect(() => { Promise.all(paths.map((p) => fileUrl(p))).then(setUrls); }, [paths]);
@@ -14,7 +24,8 @@ export default function ChapterReader({ title, paths, onClose }: { title: string
   }, [onClose]);
   const path = paths[i], url = urls[i];
   const isPdf = path?.toLowerCase().endsWith(".pdf");
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div className="fixed inset-0 z-50 bg-indigo-950/60 backdrop-blur-sm flex flex-col p-2 sm:p-6">
       <div className="card flex-1 flex flex-col overflow-hidden pop max-w-4xl w-full mx-auto">
         <div className="flex items-center gap-2 p-3 border-b border-violet-100">
@@ -34,6 +45,7 @@ export default function ChapterReader({ title, paths, onClose }: { title: string
             : <img src={url} alt={title} className="mx-auto max-w-full" />}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

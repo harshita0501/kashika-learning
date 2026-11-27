@@ -13,8 +13,8 @@ export async function POST(req: Request) {
   const { topic, chapter_id, photos = [], count } = (await req.json().catch(() => ({}))) as { topic?: string; chapter_id?: string; photos?: string[]; count?: number };
   try {
     const source = await loadSource(supabase, chapter_id, photos.slice(0, 12), topic);
-    const out = await generateCards((topic ?? "").slice(0, 200), Math.max(3, Math.min(20, Math.round(Number(count) || 10))), [], source);
-    if (out.cards.length < 3) throw new Error("Too few valid cards came back. Please try again.");
+    const out = await generateCards((topic ?? "").slice(0, 200), Math.max(8, Math.min(20, Math.round(Number(count) || 8))), [], source);
+    if (out.cards.length < 6) throw new Error("Too few valid cards came back. Please try again.");
     const { data: set, error } = await supabase.from("flashcard_sets").insert({ topic: out.topic, week_start: weekStart(), chapter_id: chapter_id || null, source_paths: photos.slice(0, 12) }).select("id").single();
     if (error) throw error;
     const { error: e2 } = await supabase.from("flashcards").insert(out.cards.map((c, i) => ({ set_id: set.id, position: i, ...c })));

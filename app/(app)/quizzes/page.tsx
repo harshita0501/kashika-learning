@@ -24,7 +24,7 @@ export default function Quizzes() {
   const [chap, setChap] = useState<Record<string, string>>({});
   const chapters = useChapters();
   const [formKey, setFormKey] = useState(0);
-  const [count, setCount] = useState(8);
+  const [count, setCount] = useState(8);  // the AI always makes at least 8
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string }[]>([]);
   const [err, setErr] = useState("");
@@ -84,8 +84,8 @@ export default function Quizzes() {
             </div>
           ))}
           <label className="flex items-center gap-2 text-sm font-extrabold">Questions in each quiz
-            <select value={count} onChange={(e) => setCount(Number(e.target.value))} disabled={busy} className="field !w-auto !py-1.5">{[4, 5, 6, 8, 10, 12, 15].map((n) => <option key={n} value={n}>{n}</option>)}</select>
-            <span className="text-xs font-semibold text-slate-500">(you can add more later)</span></label>
+            <select value={count} onChange={(e) => setCount(Number(e.target.value))} disabled={busy} className="field !w-auto !py-1.5">{[8, 10, 12, 15, 20].map((n) => <option key={n} value={n}>{n}</option>)}</select>
+            <span className="text-xs font-semibold text-slate-500">(at least 8 · you can add or delete later)</span></label>
           <button disabled={busy} className="btn btn-primary btn-big">{busy ? "🪄 Making quizzes… (about a minute)" : "🪄 Create quizzes"}</button>
           {err && <ErrorBox>{err}</ErrorBox>}
           {msg.map((m, i) => <p key={i} className={`text-sm font-bold ${m.ok ? "text-emerald-700" : "text-rose-600"}`}>{m.ok ? "✓" : "✗"} {m.text}</p>)}

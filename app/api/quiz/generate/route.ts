@@ -16,14 +16,14 @@ export async function POST(req: Request) {
   const jobs = SUBJECTS.filter((s) => body.topics?.[s]?.trim() || body.chapters?.[s] || body.photos?.[s]?.length).map((s) => ({ subject: s, topic: (body.topics?.[s] ?? "").trim().slice(0, 200), chapter: body.chapters?.[s] || null, photos: (body.photos?.[s] ?? []).slice(0, 12) }));
   if (!jobs.length) return NextResponse.json({ error: "Please enter a topic, pick a book chapter, or upload photos for at least one subject." }, { status: 400 });
 
-  const COUNT = Math.max(3, Math.min(15, Math.round(Number(body.count) || 8)));
+  const COUNT = Math.max(8, Math.min(20, Math.round(Number(body.count) || 8)));
   const week = weekStart();
   const results = await Promise.all(
     jobs.map(async (j) => {
       try {
         const source = await loadSource(supabase, j.chapter, j.photos, j.topic);
         const qs = await generateQuestions(j.subject, j.topic, COUNT, [], source);
-        if (qs.length < 3) throw new Error("Too few valid questions came back. Please try again.");
+        if (qs.length < 6) throw new Error("Too few valid questions came back. Please try again.");
         const { data: quiz, error } = await supabase.from("quizzes").insert({ subject: j.subject, topic: j.topic || (j.chapter ? source?.title : "") || (j.photos.length ? "From my photos" : "") || j.subject, week_start: week, chapter_id: j.chapter, source_paths: j.photos }).select("id").single();
         if (error) throw error;
         const { error: e2 } = await supabase.from("quiz_questions").insert(
