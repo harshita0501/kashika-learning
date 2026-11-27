@@ -8,12 +8,13 @@ import Review from "@/components/QuizReview";
 import { ThumbGrid } from "@/components/Thumb";
 import AudioPlayer from "@/components/AudioPlayer";
 import MistakeList, { type Mistake } from "@/components/MistakeList";
+import ImprovedAnswer from "@/components/ImprovedAnswer";
 import { Empty, PageTitle, Ring, SubjectChip, Tabs } from "@/components/ui";
 
 type Hw = { id: string; subject: string; title: string; description: string; due_date: string | null; file_paths: string[] };
 type Sub = { id: string; homework_id: string; file_paths: string[]; note: string; status: string; marks: number | null; comment: string; submitted_at: string };
 type QA = Attempt & { quizzes: { subject: string; topic: string } | null };
-type SA = { id: string; audio_path: string | null; transcript: string; ai_score: number | null; ai_feedback: string; mistakes: Mistake[]; teacher_score: number | null; teacher_comment: string; created_at: string;
+type SA = { id: string; audio_path: string | null; transcript: string; ai_score: number | null; ai_feedback: string; mistakes: Mistake[]; improved: string; teacher_score: number | null; teacher_comment: string; created_at: string;
   speaking_tasks: { prompt: string; kind: string; target: string; speaking_sets: { topic: string } | null } | null };
 type T = { id: string; subject: string; title: string; test_date: string; syllabus: string; syllabus_files: string[]; marks_obtained: number | null; max_marks: number | null; file_paths: string[] };
 type TP = { test_id: string; file_paths: string[]; note: string };
@@ -189,6 +190,7 @@ export default function History() {
               {a.teacher_comment && <p>👩‍🏫 “{a.teacher_comment}”</p>}
             </div>
             <MistakeList items={a.mistakes} />
+            <ImprovedAnswer improved={a.improved} />
           </article>
         );
       }))}

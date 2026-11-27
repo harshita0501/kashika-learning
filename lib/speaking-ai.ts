@@ -22,7 +22,7 @@ const Mistake = z.object({
   better: z.string(), // the corrected phrase
   why: z.string(), // one very short, kind reason in simple English
 });
-const ScoreOut = z.object({ score: z.number(), feedback: z.string(), mistakes: z.array(Mistake) });
+const ScoreOut = z.object({ score: z.number(), feedback: z.string(), mistakes: z.array(Mistake), improved: z.string() });
 export type SpeakMistake = z.infer<typeof Mistake>;
 
 const GEN_SYSTEM = `You design short spoken-English practice for Kashika, a Class 3 student (age 8-9) in India who is learning English.
@@ -48,6 +48,8 @@ MISTAKES (this is the most important part - look carefully, sentence by sentence
 For each mistake give: said = the exact wrong words she said (short), better = the corrected words, why = one very short kind reason in simple English (e.g. "We say 'a' before one dog."). Never list a mistake that is only capitalisation, punctuation or an obvious speech-recognition slip. If there are no real mistakes, return an empty list.
 For a repeat task, compare with the target: a missing or changed word (including a / the / in / on / of) counts as a mistake with category missing_word / article / preposition / pronunciation as fits.
 
+IMPROVED: for answer and describe tasks, rewrite her WHOLE spoken answer as it should sound, in correct, natural English a Class 3 child can say. Keep her ideas, her order and as many of her own words as possible; fix every mistake (articles, prepositions, tense, plurals, verb agreement, missing words); add capital letters and full stops; you may add a tiny connecting word (and, then, because) so it flows, but do NOT add new facts or fancy words. If she said only a few words, turn them into one proper sentence using her words. For repeat tasks return an empty string "" (the target sentence is already the model).
+
 FEEDBACK: 1-2 short, warm sentences TO Kashika in very simple English: first something she did well, then the single most useful tip. Do not repeat the whole mistakes list here.`;
 
 function client() { return new Anthropic(); }
@@ -68,7 +70,7 @@ export async function generateTasks(topic: string, count: number, avoid: string[
   return { topic: res.parsed_output.topic.trim() || topic.trim(), tasks };
 }
 
-export async function scoreSpeech(task: { kind: Kind; prompt: string; target: string }, transcript: string): Promise<{ score: number; feedback: string; mistakes: SpeakMistake[] }> {
+export async function scoreSpeech(task: { kind: Kind; prompt: string; target: string }, transcript: string): Promise<{ score: number; feedback: string; mistakes: SpeakMistake[]; improved: string }> {
   const user = `Task type: ${task.kind}\nTask: ${task.prompt}\n${task.kind === "repeat" ? `Target sentence: ${task.target}\n` : ""}Transcript of Kashika's voice note: "${transcript}"`;
   const res = await client().beta.messages.parse({
     model: MODEL, max_tokens: 3000, system: SCORE_SYSTEM,
@@ -82,5 +84,6 @@ export async function scoreSpeech(task: { kind: Kind; prompt: string; target: st
     .map((m) => ({ ...m, said: m.said.trim(), better: m.better.trim(), why: m.why.trim() }))
     .filter((m) => m.said && m.better && m.said.toLowerCase() !== m.better.toLowerCase())
     .slice(0, 4);
-  return { score, feedback: res.parsed_output.feedback.trim(), mistakes };
+  const improved = task.kind === "repeat" ? "" : res.parsed_output.improved.trim();
+  return { score, feedback: res.parsed_output.feedback.trim(), mistakes, improved };
 }

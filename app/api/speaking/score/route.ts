@@ -19,6 +19,7 @@ export async function POST(req: Request) {
 
   let ai_score: number | null = null;
   let mistakes: unknown[] = [];
+  let improved = "";
   let ai_feedback = "Ma'am will listen to your recording and give you marks. Well done for speaking!";
   if (transcript && process.env.ANTHROPIC_API_KEY) {
     try {
@@ -26,12 +27,13 @@ export async function POST(req: Request) {
       ai_score = r.score;
       ai_feedback = r.feedback;
       mistakes = r.mistakes;
+      improved = r.improved;
     } catch {
       ai_feedback = "Ma'am will listen to your recording and give you marks. Well done for speaking!";
     }
   }
   const { data, error } = await supabase.from("speaking_attempts")
-    .insert({ task_id: task.id, audio_path, transcript, ai_score, ai_feedback, mistakes }).select("*").single();
+    .insert({ task_id: task.id, audio_path, transcript, ai_score, ai_feedback, mistakes, improved }).select("*").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ attempt: data });
 }
