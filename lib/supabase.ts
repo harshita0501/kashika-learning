@@ -25,7 +25,8 @@ async function shrinkImage(file: File): Promise<File> {
 export async function uploadFile(input: File, folder: string) {
   const file = await shrinkImage(input);
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const path = `${folder}/${Date.now()}-${safe}`;
+  // random part: two photos with the same name (e.g. "image.jpg") uploaded together must not collide
+  const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
   const { error } = await supabase.storage.from(BUCKET).upload(path, file);
   if (error) throw error;
   return path;
