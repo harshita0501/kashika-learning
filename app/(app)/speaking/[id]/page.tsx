@@ -9,6 +9,7 @@ import { useTodo } from "@/lib/todo";
 import { Confetti, ErrorBox } from "@/components/ui";
 import MistakeList, { type Mistake } from "@/components/MistakeList";
 import AddMore from "@/components/AddMore";
+import { speak, prefetchSpeech } from "@/lib/speech";
 
 type SetRow = { id: string; topic: string; week_start: string; status: "draft" | "assigned" };
 type Task = { id: string; position: number; kind: "repeat" | "answer" | "describe"; prompt: string; target: string; hint: string };
@@ -18,14 +19,7 @@ const KIND: Record<string, string> = { repeat: "🔁 Repeat after me", answer: "
 const stars = (n: number) => "⭐".repeat(n) + "☆".repeat(5 - n);
 const finalScore = (a?: Att) => (a ? a.teacher_score ?? a.ai_score : null);
 
-function listen(text: string) {
-  try {
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "en-IN"; u.rate = 0.85;
-    window.speechSynthesis.speak(u);
-  } catch { /* not supported */ }
-}
+const listen = (text: string) => { void speak(text, { rate: 0.88 }); };
 
 function Result({ a }: { a: Att }) {
   const sc = finalScore(a);
@@ -63,6 +57,7 @@ export default function SpeakingSet() {
     setSet(s.data as SetRow | null); setTasks(ts); setAtts((a.data ?? []) as Att[]); setLoaded(true);
   }, [id]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (tasks.length) prefetchSpeech(tasks.filter((t) => t.kind === "repeat").map((t) => t.target)); }, [tasks]);
 
   if (!loaded) return <p className="text-gray-500">Loading…</p>;
   if (!set) return <p>Not found.</p>;

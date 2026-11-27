@@ -6,13 +6,12 @@ import { useMe } from "@/lib/session";
 import { Confetti, ErrorBox, Ring } from "@/components/ui";
 import { useTodo } from "@/lib/todo";
 import AddMore from "@/components/AddMore";
+import { speak, prefetchSpeech } from "@/lib/speech";
 
 type Card = { id: string; position: number; word: string; emoji: string; meaning: string; example: string; hindi: string };
 type SetRow = { id: string; topic: string; status: "draft" | "assigned" };
 
-function say(text: string) {
-  try { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = "en-IN"; u.rate = 0.8; window.speechSynthesis.speak(u); } catch { /* unsupported */ }
-}
+const say = (text: string) => { void speak(text, { rate: 0.85 }); };
 const HUES = ["from-fuchsia-500 to-pink-500", "from-amber-400 to-orange-500", "from-teal-400 to-emerald-500", "from-indigo-500 to-violet-500", "from-sky-400 to-blue-500"];
 
 export default function Deck() {
@@ -43,6 +42,7 @@ export default function Deck() {
     setLoaded(true);
   }, [id]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (cards.length) prefetchSpeech(cards.flatMap((c) => [c.word, c.example]).filter(Boolean)); }, [cards]);
 
   if (!loaded) return <div className="text-center py-16 text-5xl float">🦉</div>;
   if (!set) return <p>Not found.</p>;

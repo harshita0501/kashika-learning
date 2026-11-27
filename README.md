@@ -37,6 +37,9 @@ Weekly **flashcards**: ma'am gives a theme (optional) → AI makes 10 words (fro
 **Books** tab: the four official NCERT Class 3 books (Santoor, Maths Mela, Veena, Our Wondrous World; free for educational use, reprint 2026-27) are loaded chapter-wise; ma'am can add her own school books by uploading chapter PDFs/photos. Kashika can read them in-app. On any chapter ma'am taps 🧠 Quiz / 🃏 Cards / 🎤 Speak and the AI reads that chapter's pages and builds the set from it. The quiz / flashcard / speaking forms also take a chapter or directly uploaded photos/PDF of pages. Run `supabase/v7_set_my_name.sql`, `v8_books.sql`, `v9_source_chapter.sql`, `v10_source_paths.sql`, then `scripts/seed-ncert.mjs` (needs the NCERT PDFs downloaded from ncert.nic.in).
 **Profile** page: everyone can change display name, login email (confirmation link sent to the new address) and password.
 
+## Natural voice for "Listen" (optional)
+Without any setup, "Listen" uses the best voice the device has (neural/enhanced if available), sentence by sentence with small pauses. For a ChatGPT-like fluent voice, add in Vercel: `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` (Azure AI Speech, free F0 tier = 500k characters/month). Optional: `TTS_VOICE` (default `en-IN-NeerjaNeural`), `TTS_RATE` (default `-6%`). Each sentence is synthesised once and cached in storage, so cost stays tiny.
+
 ## AI model
 All AI features read `QUIZ_MODEL` (default `claude-opus-5-5`). Set `QUIZ_MODEL=claude-sonnet-5-5` in Vercel to roughly halve the cost.
 
