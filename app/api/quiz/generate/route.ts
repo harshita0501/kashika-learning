@@ -3,6 +3,7 @@ import { teacherClient } from "@/lib/supabase-server";
 import { generateQuestions } from "@/lib/quiz-ai";
 import { weekStart } from "@/lib/quiz";
 import { loadSource } from "@/lib/book-source";
+import { pastItems, remember, topicKey } from "@/lib/ai-history";
 import { SUBJECTS } from "@/lib/constants";
 
 export const maxDuration = 120;
@@ -22,7 +23,9 @@ export async function POST(req: Request) {
     jobs.map(async (j) => {
       try {
         const source = await loadSource(supabase, j.chapter, j.photos, j.topic);
-        const qs = await generateQuestions(j.subject, j.topic, COUNT, [], source);
+        const key = topicKey(j.topic, j.chapter);
+        const past = await pastItems(supabase, "quiz", j.subject, key);
+        const qs = await generateQuestions(j.subject, j.topic, COUNT, past, source);
         if (qs.length < 6) throw new Error("Too few valid questions came back. Please try again.");
         const { data: quiz, error } = await supabase.from("quizzes").insert({ subject: j.subject, topic: j.topic || (j.chapter ? source?.title : "") || (j.photos.length ? "From my photos" : "") || j.subject, week_start: week, chapter_id: j.chapter, source_paths: j.photos }).select("id").single();
         if (error) throw error;
@@ -30,6 +33,7 @@ export async function POST(req: Request) {
           qs.map((q, i) => ({ quiz_id: quiz.id, position: i, type: q.type, prompt: q.prompt, options: q.options, answer: q.answer, explanation: q.explanation })),
         );
         if (e2) { await supabase.from("quizzes").delete().eq("id", quiz.id); throw e2; }
+        await remember(supabase, "quiz", j.subject, key, qs.map((q) => q.prompt));
         return { subject: j.subject, ok: true as const, count: qs.length };
       } catch (e) {
         return { subject: j.subject, ok: false as const, error: (e as Error).message };

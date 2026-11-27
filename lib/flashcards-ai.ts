@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { withSource, type ChapterSource } from "./book-source";
+import { freshNote } from "./ai-history";
 
 const MODEL = process.env.QUIZ_MODEL || "claude-opus-5-5";
 
@@ -29,7 +30,7 @@ If no topic is given, choose a fun everyday theme (e.g. kitchen, feelings, weath
 
 export async function generateCards(topic: string, count: number, avoid: string[] = [], source?: ChapterSource | null): Promise<{ topic: string; cards: DraftCard[] }> {
   const user = `Topic: ${topic.trim() || source?.title || "(none - you choose)"}\nMake ${count} flashcard${count > 1 ? "s" : ""}.` +
-    (avoid.length ? `\n\nDo not use these words again: ${avoid.join(", ")}` : "");
+    (avoid.length ? `\n\nDo not use these words again: ${avoid.join(", ")}` : "") + freshNote(avoid.length > 0);
   const res = await new Anthropic().beta.messages.parse({
     model: MODEL, max_tokens: 6000, system: SYSTEM,
     betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",

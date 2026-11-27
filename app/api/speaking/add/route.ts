@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { teacherClient } from "@/lib/supabase-server";
 import { generateTasks } from "@/lib/speaking-ai";
 import { loadSource } from "@/lib/book-source";
+import { pastItems, remember, topicKey } from "@/lib/ai-history";
 
 export const maxDuration = 120;
 
@@ -18,11 +19,14 @@ export async function POST(req: Request) {
   if ((have?.length ?? 0) + n > 20) return NextResponse.json({ error: "A speaking set can have at most 20 tasks." }, { status: 400 });
   try {
     const source = await loadSource(supabase, set.chapter_id, set.source_paths ?? [], set.topic);
-    const out = await generateTasks(set.topic, n, (have ?? []).map((h) => h.prompt), undefined, source);
+    const key = topicKey(set.topic, set.chapter_id);
+    const past = await pastItems(supabase, "speaking", "", key);
+    const out = await generateTasks(set.topic, n, [...(have ?? []).map((h) => h.prompt), ...past], undefined, source);
     if (!out.tasks.length) throw new Error("Could not make new tasks. Please try again.");
     const start = Math.max(-1, ...(have ?? []).map((h) => h.position)) + 1;
     const { error } = await supabase.from("speaking_tasks").insert(out.tasks.map((t, i) => ({ set_id, position: start + i, kind: t.kind, prompt: t.prompt, target: t.target, hint: t.hint })));
     if (error) throw error;
+    await remember(supabase, "speaking", "", key, out.tasks.map((t) => t.target || t.prompt));
     return NextResponse.json({ ok: true, added: out.tasks.length });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

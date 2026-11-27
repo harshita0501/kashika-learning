@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { teacherClient } from "@/lib/supabase-server";
 import { generateCards } from "@/lib/flashcards-ai";
 import { loadSource } from "@/lib/book-source";
+import { pastItems, remember, topicKey } from "@/lib/ai-history";
 
 export const maxDuration = 60;
 
@@ -19,11 +20,14 @@ export async function POST(req: Request) {
   ]);
   try {
     const source = await loadSource(supabase, set?.chapter_id, set?.source_paths ?? [], set?.topic ?? "");
-    const out = await generateCards(set?.topic ?? "", 1, (others ?? []).map((o) => o.word), source);
+    const key = topicKey(set?.topic, set?.chapter_id);
+    const past = await pastItems(supabase, "flashcards", "", key);
+    const out = await generateCards(set?.topic ?? "", 1, [...(others ?? []).map((o) => o.word), ...past], source);
     const n = out.cards[0];
     if (!n) throw new Error("Could not make a new card. Please try again.");
     const { error } = await supabase.from("flashcards").update(n).eq("id", c.id);
     if (error) throw error;
+    await remember(supabase, "flashcards", "", key, [n.word]);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

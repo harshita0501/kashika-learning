@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { withSource, type ChapterSource } from "./book-source";
+import { freshNote } from "./ai-history";
 
 const MODEL = process.env.QUIZ_MODEL || "claude-opus-5-5";
 
@@ -53,7 +54,7 @@ function client() { return new Anthropic(); }
 
 export async function generateTasks(topic: string, count: number, avoid: string[] = [], onlyKind?: Kind, source?: ChapterSource | null): Promise<{ topic: string; tasks: DraftTask[] }> {
   const user = `Topic: ${topic.trim() || source?.title || "(none - you choose)"}\nWrite ${count} task${count > 1 ? "s" : ""}${onlyKind ? ` of kind "${onlyKind}"` : ""}.` +
-    (avoid.length ? `\n\nDo not repeat or closely resemble:\n${avoid.map((a) => "- " + a).join("\n")}` : "");
+    (avoid.length ? `\n\nDo not repeat or closely resemble:\n${avoid.map((a) => "- " + a).join("\n")}` : "") + freshNote(avoid.length > 0);
   const res = await client().beta.messages.parse({
     model: MODEL, max_tokens: 4000, system: GEN_SYSTEM,
     betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",

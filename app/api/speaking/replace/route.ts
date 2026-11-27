@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { teacherClient } from "@/lib/supabase-server";
 import { generateTasks } from "@/lib/speaking-ai";
 import { loadSource } from "@/lib/book-source";
+import { pastItems, remember, topicKey } from "@/lib/ai-history";
 
 export const maxDuration = 60;
 
@@ -19,11 +20,14 @@ export async function POST(req: Request) {
   ]);
   try {
     const source = await loadSource(supabase, set?.chapter_id, set?.source_paths ?? [], set?.topic ?? "");
-    const out = await generateTasks(set?.topic ?? "", 1, (others ?? []).map((o) => o.prompt), t.kind, source);
+    const key = topicKey(set?.topic, set?.chapter_id);
+    const past = await pastItems(supabase, "speaking", "", key);
+    const out = await generateTasks(set?.topic ?? "", 1, [...(others ?? []).map((o) => o.prompt), ...past], t.kind, source);
     const n = out.tasks[0];
     if (!n) throw new Error("Could not make a new task. Please try again.");
     const { error } = await supabase.from("speaking_tasks").update({ kind: n.kind, prompt: n.prompt, target: n.target, hint: n.hint }).eq("id", t.id);
     if (error) throw error;
+    await remember(supabase, "speaking", "", key, [n.target || n.prompt]);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

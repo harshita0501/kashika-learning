@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { teacherClient } from "@/lib/supabase-server";
 import { generateQuestions } from "@/lib/quiz-ai";
 import { loadSource } from "@/lib/book-source";
+import { pastItems, remember, topicKey } from "@/lib/ai-history";
 
 export const maxDuration = 120;
 
@@ -18,11 +19,14 @@ export async function POST(req: Request) {
   if ((have?.length ?? 0) + n > 30) return NextResponse.json({ error: "A quiz can have at most 30 questions." }, { status: 400 });
   try {
     const source = await loadSource(supabase, quiz.chapter_id, quiz.source_paths ?? [], quiz.topic);
-    const qs = await generateQuestions(quiz.subject, quiz.topic, n, (have ?? []).map((h) => h.prompt), source);
+    const key = topicKey(quiz.topic, quiz.chapter_id);
+    const past = await pastItems(supabase, "quiz", quiz.subject, key);
+    const qs = await generateQuestions(quiz.subject, quiz.topic, n, [...(have ?? []).map((h) => h.prompt), ...past], source);
     if (!qs.length) throw new Error("Could not make new questions. Please try again.");
     const start = Math.max(-1, ...(have ?? []).map((h) => h.position)) + 1;
     const { error } = await supabase.from("quiz_questions").insert(qs.map((q, i) => ({ quiz_id, position: start + i, type: q.type, prompt: q.prompt, options: q.options, answer: q.answer, explanation: q.explanation })));
     if (error) throw error;
+    await remember(supabase, "quiz", quiz.subject, key, qs.map((q) => q.prompt));
     return NextResponse.json({ ok: true, added: qs.length });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
