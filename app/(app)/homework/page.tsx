@@ -10,7 +10,7 @@ import { Empty, ErrorBox, PageTitle, SubjectChip, Tabs } from "@/components/ui";
 import { useTodo } from "@/lib/todo";
 
 type Hw = { id: string; subject: string; title: string; description: string; due_date: string | null; file_paths: string[]; created_at: string };
-type Sub = { id: string; homework_id: string; file_paths: string[]; note: string; status: "submitted" | "checked" | "redo"; marks: number | null; comment: string; submitted_at: string };
+type Sub = { id: string; homework_id: string; file_paths: string[]; note: string; status: "submitted" | "checked" | "redo"; marks: number | null; comment: string; comment_files: string[]; submitted_at: string };
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   pending: { label: "To do", cls: "bg-slate-100 text-slate-700" },
@@ -125,8 +125,21 @@ export default function Homework() {
   async function check(sub: Sub, form: HTMLFormElement, status: "checked" | "redo") {
     const f = new FormData(form);
     const marks = f.get("marks");
-    await supabase.from("submissions").update({ status, marks: marks === "" || marks === null ? null : Number(marks), comment: f.get("comment") }).eq("id", sub.id);
-    load(); todo.refresh();
+    setErr(""); setBusy(sub.id + "chk");
+    try {
+      const added = await Promise.all((f.getAll("comment_photos") as File[]).filter((x) => x.size).map((x) => uploadFile(x, "remarks")));
+      const { error } = await supabase.from("submissions").update({
+        status, marks: marks === "" || marks === null ? null : Number(marks), comment: f.get("comment"), comment_files: [...(sub.comment_files ?? []), ...added],
+      }).eq("id", sub.id);
+      if (error) throw error;
+      load(); todo.refresh();
+    } catch (x) { setErr((x as Error).message); }
+    setBusy(null);
+  }
+  async function removeCommentFile(sub: Sub, p: string) {
+    if (!confirm("Remove this photo from your remarks?")) return;
+    await supabase.from("submissions").update({ comment_files: sub.comment_files.filter((x) => x !== p) }).eq("id", sub.id);
+    load();
   }
 
   const counts = { todo: hws.filter(inTodo).length, open: hws.filter(inOpen).length };
@@ -221,7 +234,13 @@ export default function Homework() {
                     <div className={`rounded-xl px-3 py-2 text-sm ${s.status === "checked" ? "bg-emerald-100 text-emerald-900" : "bg-rose-100 text-rose-900"}`}>
                       {s.marks !== null && <b className="mr-2">⭐ Marks: {s.marks}</b>}
                       {s.comment && <>👩‍🏫 “{s.comment}”</>}
-                      {s.marks === null && !s.comment && (s.status === "redo" ? "Please try again." : "Checked!")}
+                      {s.marks === null && !s.comment && (s.comment_files?.length ?? 0) === 0 && (s.status === "redo" ? "Please try again." : "Checked!")}
+                    </div>
+                  )}
+                  {(s.comment_files?.length ?? 0) > 0 && s.status !== "submitted" && (
+                    <div className="space-y-1"><div className="text-xs font-extrabold text-slate-500">📎 Ma&apos;am&apos;s remarks (photos)</div>
+                      <ThumbGrid paths={s.comment_files} label="Remark" title={`Ma'am's remarks · ${h.title}`} renderExtra={isTeacher ? (p) => (
+                        <button onClick={() => removeCommentFile(s, p)} className="absolute -top-2 -right-2 size-7 rounded-full bg-rose-500 text-white text-sm font-extrabold shadow" title="Remove photo">✕</button>) : undefined} />
                     </div>
                   )}
                 </div>
@@ -251,8 +270,9 @@ export default function Homework() {
                     <input name="marks" type="number" step="0.5" placeholder="Marks" defaultValue={s.marks ?? ""} className="field !w-28" />
                     <input name="comment" placeholder="Comment for Kashika" defaultValue={s.comment} className="field" />
                   </div>
+                  <FileInput name="comment_photos" multiple compact label="Add photos with your remarks (corrections, example)" />
                   <div className="flex gap-2">
-                    <button type="button" onClick={(e) => check(s, e.currentTarget.form!, "checked")} className="btn btn-green flex-1">✔ Mark checked</button>
+                    <button type="button" disabled={busy === s.id + "chk"} onClick={(e) => check(s, e.currentTarget.form!, "checked")} className="btn btn-green flex-1">{busy === s.id + "chk" ? "Saving…" : "✔ Mark checked"}</button>
                     <button type="button" onClick={(e) => check(s, e.currentTarget.form!, "redo")} className="btn btn-red flex-1">🔁 Redo</button>
                   </div>
                 </form>

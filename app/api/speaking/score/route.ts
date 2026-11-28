@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   const { data: u } = await supabase.auth.getUser();
   if (!u.user) return NextResponse.json({ error: "Please log in." }, { status: 401 });
 
-  const body = (await req.json().catch(() => ({}))) as { task_id?: string; transcript?: string; audio_path?: string };
+  const body = (await req.json().catch(() => ({}))) as { task_id?: string; transcript?: string; transcript_original?: string; typed?: boolean; audio_path?: string };
   if (!body.task_id) return NextResponse.json({ error: "Missing task." }, { status: 400 });
   const transcript = (body.transcript ?? "").trim().slice(0, 600);
   const audio_path = body.audio_path && /^speaking\/[\w./-]+$/.test(body.audio_path) ? body.audio_path : null;
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   let ai_score: number | null = null;
   let mistakes: unknown[] = [];
   let improved = "";
-  let ai_feedback = "Ma'am will listen to your recording and give you marks. Well done for speaking!";
+  let ai_feedback = "Ma'am will listen to your answer and give you marks. Well done for speaking!";
   if (transcript && process.env.ANTHROPIC_API_KEY) {
     try {
       const r = await scoreSpeech(task, transcript);
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     }
   }
   const { data, error } = await supabase.from("speaking_attempts")
-    .insert({ task_id: task.id, audio_path, transcript, ai_score, ai_feedback, mistakes, improved }).select("*").single();
+    .insert({ task_id: task.id, audio_path, transcript, transcript_original: (body.transcript_original ?? "").trim().slice(0, 600), typed: !!body.typed, ai_score, ai_feedback, mistakes, improved }).select("*").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ attempt: data });
 }

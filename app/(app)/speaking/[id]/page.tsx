@@ -14,7 +14,7 @@ import { speak, prefetchSpeech } from "@/lib/speech";
 
 type SetRow = { id: string; topic: string; week_start: string; status: "draft" | "assigned" };
 type Task = { id: string; position: number; kind: "repeat" | "answer" | "describe"; prompt: string; target: string; hint: string };
-type Att = { id: string; task_id: string; audio_path: string | null; transcript: string; ai_score: number | null; ai_feedback: string; mistakes: Mistake[]; improved: string; teacher_score: number | null; teacher_comment: string; created_at: string };
+type Att = { id: string; task_id: string; audio_path: string | null; transcript: string; transcript_original: string; typed: boolean; ai_score: number | null; ai_feedback: string; mistakes: Mistake[]; improved: string; teacher_score: number | null; teacher_comment: string; created_at: string };
 
 const KIND: Record<string, string> = { repeat: "🔁 Repeat after me", answer: "💬 Answer", describe: "🖼️ Describe" };
 const stars = (n: number) => "⭐".repeat(n) + "☆".repeat(5 - n);
@@ -84,9 +84,12 @@ export default function SpeakingSet() {
     if (!r) return;
     setBusy(t.id); setErr("");
     try {
-      const ext = r.mime.includes("mp4") ? "m4a" : r.mime.includes("ogg") ? "ogg" : "webm";
-      const audio_path = await uploadFile(new File([r.blob], `${t.id}.${ext}`, { type: r.mime }), "speaking");
-      const res = await fetch("/api/speaking/score", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task_id: t.id, transcript: r.transcript, audio_path }) });
+      let audio_path: string | null = null;
+      if (r.blob) {
+        const ext = r.mime.includes("mp4") ? "m4a" : r.mime.includes("ogg") ? "ogg" : "webm";
+        audio_path = await uploadFile(new File([r.blob], `${t.id}.${ext}`, { type: r.mime }), "speaking");
+      }
+      const res = await fetch("/api/speaking/score", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task_id: t.id, transcript: r.transcript, transcript_original: r.original, typed: r.typed, audio_path }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "Could not send");
       setRec({ ...rec, [t.id]: null }); setAgain({ ...again, [t.id]: false });
@@ -168,7 +171,7 @@ export default function SpeakingSet() {
             {a && !showRecorder && (
               <div className="space-y-2 border-t pt-2">
                 {a.audio_path && <AudioPlayer path={a.audio_path} />}
-                {a.transcript && <p className="text-sm bg-amber-50 rounded-xl px-3 py-2"><b>Heard:</b> {a.transcript}</p>}
+                {a.transcript && <p className="text-sm bg-amber-50 rounded-xl px-3 py-2"><b>{a.typed ? "Typed:" : "Heard:"}</b> {a.transcript}{a.typed && <span className="chip bg-sky-100 text-sky-800 ml-2">⌨️ typed, not spoken</span>}{!a.typed && a.transcript_original && a.transcript_original.trim() !== a.transcript.trim() && <span className="block mt-1 text-xs text-slate-500">✏️ Kashika corrected the text. The app first heard: “{a.transcript_original}”</span>}</p>}
                 <Result a={a} />
                 {me.role === "student" && <button onClick={() => setAgain({ ...again, [t.id]: true })} className="btn btn-soft !py-2 text-sm">🔁 Try again</button>}
                 {isTeacher && (

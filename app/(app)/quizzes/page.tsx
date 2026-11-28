@@ -12,7 +12,7 @@ import { useChapters } from "@/lib/chapters";
 import ChapterSelect from "@/components/ChapterSelect";
 
 const PLACEHOLDER: Record<string, string> = {
-  Hindi: "e.g. vilom shabd / matraen", English: "e.g. prepositions, articles", EVS: "e.g. road transport", Maths: "e.g. division", Science: "e.g. solar system",
+  Hindi: "e.g. vilom shabd / matraen", English: "e.g. prepositions, articles", EVS: "e.g. road transport", Maths: "e.g. division", Science: "e.g. solar system", "Social Studies": "e.g. story of fire, farming and the wheel",
 };
 
 export default function Quizzes() {

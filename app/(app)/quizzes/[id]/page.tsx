@@ -9,6 +9,7 @@ import Review, { correctText } from "@/components/QuizReview";
 import { Confetti, ErrorBox, Ring, SubjectChip } from "@/components/ui";
 import { useTodo } from "@/lib/todo";
 import AddMore from "@/components/AddMore";
+import ExamGuard, { enterExam, leaveExam, fullscreenSupported, eventLabel } from "@/components/ExamGuard";
 
 type Resp = Attempt["responses"];
 
@@ -29,13 +30,17 @@ export default function QuizPage() {
   const [err, setErr] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [party, setParty] = useState(false);
+  const [examOn, setExamOn] = useState(false);
+  const [events, setEvents] = useState<{ event: string; created_at: string }[]>([]);
 
   const load = useCallback(async () => {
-    const [a, b, c] = await Promise.all([
+    const [a, b, c, ev] = await Promise.all([
       supabase.from("quizzes").select("*").eq("id", id).maybeSingle(),
       supabase.from("quiz_questions").select("*").eq("quiz_id", id).order("position"),
       supabase.from("quiz_attempts").select("*").eq("quiz_id", id).order("submitted_at", { ascending: false }),
+      supabase.from("exam_events").select("event, created_at").eq("ref_kind", "quiz").eq("ref_id", id).order("created_at"),
     ]);
+    setEvents((ev.data ?? []) as { event: string; created_at: string }[]);
     setQuiz(a.data as Quiz | null);
     setQs((b.data ?? []) as Question[]);
     setAttempts((c.data ?? []) as Attempt[]);
@@ -67,6 +72,7 @@ export default function QuizPage() {
     setBusy(false);
     if (error) { setErr(error.message); return; }
     setTaking(false); setResp({}); setChecked({}); setIdx(0); setViewId(data.id);
+    setExamOn(false); void leaveExam();
     if (total && score / total >= 0.6) { setParty(true); setTimeout(() => setParty(false), 5000); }
     load(); todo.refresh();
   }
@@ -96,6 +102,7 @@ export default function QuizPage() {
           <button onClick={delQuiz} className="text-rose-600 text-sm font-bold ml-auto">Delete quiz</button>
         </div>
         {err && <ErrorBox>{err}</ErrorBox>}
+        {events.length > 0 && <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3 text-sm"><b>⚠️ Kashika left the quiz screen {events.length} time{events.length > 1 ? "s" : ""}:</b> {events.map((e) => `${eventLabel(e.event)} (${new Date(e.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`).join(" · ")}</div>}
         {attempts.length > 0 && (
           <div className="rounded-2xl bg-violet-50 border border-violet-100 p-3 text-sm"><b>Kashika&apos;s attempts:</b> {attempts.map((a) => `${a.score}/${a.total} (${new Date(a.submitted_at).toLocaleDateString()})`).join(" · ")}</div>
         )}
@@ -120,7 +127,7 @@ export default function QuizPage() {
 
     function pick(k: number) { if (done) return; setResp({ ...resp, [q.id]: k }); setChecked({ ...checked, [q.id]: true }); }
 
-    return (
+    const quizBody = (
       <div className="space-y-3">
         {head}
         <div className="fade-up">
@@ -184,6 +191,26 @@ export default function QuizPage() {
         {done && last && <button onClick={finish} disabled={busy} className="btn btn-green btn-big pop">{busy ? "Saving…" : "Finish & see my score 🎉"}</button>}
       </div>
     );
+
+    if (!examOn) {
+      return (
+        <div className="space-y-3">
+          {head}
+          <div className="card p-6 text-center space-y-3 pop">
+            <div className="text-6xl float inline-block">📝</div>
+            <h2 className="font-display font-extrabold text-2xl">Ready for your quiz?</h2>
+            <ul className="text-left text-sm font-semibold text-slate-600 space-y-1.5 max-w-sm mx-auto">
+              <li>🖥️ The quiz opens in <b>full screen</b>.</li>
+              <li>🚫 Please do not switch to another app or tab, or press back.</li>
+              <li>👀 If you leave, the quiz pauses and ma&apos;am will see it.</li>
+              {!fullscreenSupported() && <li className="text-amber-700">ℹ️ Full screen is not available on this phone, but leaving the page is still noted.</li>}
+            </ul>
+            <button onClick={async () => { await enterExam(); setExamOn(true); }} className="btn btn-primary btn-big">▶ Start quiz</button>
+          </div>
+        </div>
+      );
+    }
+    return <ExamGuard kind="quiz" refId={quiz.id}>{quizBody}</ExamGuard>;
   }
 
   // ---------- Result (Kashika after finishing, or parent) ----------

@@ -12,11 +12,11 @@ import ImprovedAnswer from "@/components/ImprovedAnswer";
 import { Empty, PageTitle, Ring, SubjectChip, Tabs } from "@/components/ui";
 
 type Hw = { id: string; subject: string; title: string; description: string; due_date: string | null; file_paths: string[] };
-type Sub = { id: string; homework_id: string; file_paths: string[]; note: string; status: string; marks: number | null; comment: string; submitted_at: string };
+type Sub = { id: string; homework_id: string; file_paths: string[]; note: string; status: string; marks: number | null; comment: string; comment_files: string[]; submitted_at: string };
 type QA = Attempt & { quizzes: { subject: string; topic: string } | null };
 type SA = { id: string; audio_path: string | null; transcript: string; ai_score: number | null; ai_feedback: string; mistakes: Mistake[]; improved: string; teacher_score: number | null; teacher_comment: string; created_at: string;
   speaking_tasks: { prompt: string; kind: string; target: string; speaking_sets: { topic: string } | null } | null };
-type T = { id: string; subject: string; title: string; test_date: string; syllabus: string; syllabus_files: string[]; marks_obtained: number | null; max_marks: number | null; file_paths: string[] };
+type T = { id: string; subject: string; title: string; test_date: string; syllabus: string; remarks: string; syllabus_files: string[]; marks_obtained: number | null; max_marks: number | null; file_paths: string[] };
 type TP = { test_id: string; file_paths: string[]; note: string };
 type TA = { test_id: string; file_paths: string[]; note: string; submitted_at: string };
 
@@ -152,6 +152,7 @@ export default function History() {
               {s.file_paths.length > 0 ? <ThumbGrid paths={s.file_paths} label="Page" title={`My answer · ${h.title}`} /> : !s.note && <p className="text-sm text-slate-400">No file</p>}
             </div>
             {(s.marks !== null || s.comment) && <div className="rounded-xl bg-emerald-100 text-emerald-900 px-3 py-2 text-sm">{s.marks !== null && <b className="mr-2">⭐ {s.marks}</b>}{s.comment && <>👩‍🏫 “{s.comment}”</>}</div>}
+            {(s.comment_files?.length ?? 0) > 0 && <div className="space-y-1"><div className="text-xs font-extrabold text-slate-500">📎 Ma&apos;am&apos;s remarks (photos)</div><ThumbGrid paths={s.comment_files} label="Remark" title={`Ma'am's remarks · ${h.title}`} /></div>}
           </article>
         );
       }))}
@@ -203,11 +204,13 @@ export default function History() {
             <div className="flex items-center gap-3">
               <div className="flex-1"><h2 className="font-display font-extrabold text-lg">{t.title}</h2>{t.syllabus && <p className="text-sm text-slate-600">📖 {t.syllabus}</p>}</div>
               {pct !== null && <Ring value={pct} max={100} size={72} stroke={9} from={pct >= 80 ? "#34d399" : pct >= 50 ? "#fbbf24" : "#fb7185"} to={pct >= 80 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#ef4444"}><div className="text-xs font-extrabold">{t.marks_obtained}/{t.max_marks}</div></Ring>}
+              {t.marks_obtained !== null && !t.max_marks && <span className="chip bg-amber-100 text-amber-800 !text-base">🏅 {t.marks_obtained}</span>}
             </div>
             {t.syllabus_files.length > 0 && <div className="space-y-1"><div className="text-xs font-extrabold text-slate-500">📚 Syllabus</div><ThumbGrid paths={t.syllabus_files} label="Syllabus" title={`${t.title} · syllabus`} /></div>}
             {tpapers[t.id] && <div className="space-y-1"><div className="text-xs font-extrabold text-slate-500">📄 Test paper</div><ThumbGrid paths={tpapers[t.id].file_paths} label="Paper" title={`${t.title} · test paper`} /></div>}
             {tans[t.id] && <div className="space-y-1 rounded-2xl bg-violet-50/70 border border-violet-100 p-2.5"><div className="text-xs font-extrabold text-slate-500">✍️ My answer sheet · {new Date(tans[t.id].submitted_at).toLocaleDateString()}</div>{tans[t.id].file_paths.length > 0 && <ThumbGrid paths={tans[t.id].file_paths} label="Page" title={`My answer sheet · ${t.title}`} />}{tans[t.id].note && <p className="text-sm">{tans[t.id].note}</p>}</div>}
-            {t.file_paths.length > 0 && <div className="space-y-1"><div className="text-xs font-extrabold text-slate-500">✅ Checked paper</div><ThumbGrid paths={t.file_paths} label="Checked" title={`${t.title} · checked paper`} /></div>}
+            {t.remarks && <div className="rounded-2xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm">👩‍🏫 <b>Ma&apos;am&apos;s remarks:</b> {t.remarks}</div>}
+            {t.file_paths.length > 0 && <div className="space-y-1"><div className="text-xs font-extrabold text-slate-500">✅ Remarks photos &amp; checked paper</div><ThumbGrid paths={t.file_paths} label="Checked" title={`${t.title} · checked paper`} /></div>}
           </article>
         );
       }))}

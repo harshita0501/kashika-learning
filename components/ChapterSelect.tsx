@@ -6,7 +6,7 @@ export default function ChapterSelect({ chapters, value, onChange, subject, disa
   chapters: ChapterOpt[]; value: string; onChange: (v: string) => void; subject?: string; disabled?: boolean; className?: string;
 }) {
   if (!chapters.length) return null;
-  const match = (c: ChapterOpt) => !subject || c.subject === subject || (subject === "Science" && c.subject === "EVS");
+  const match = (c: ChapterOpt) => !subject || c.subject === subject || ((subject === "Science" || subject === "Social Studies") && c.subject === "EVS");
   const groups = (list: ChapterOpt[]) => [...new Set(list.map((c) => c.bookTitle))].map((b) => ({ b, items: list.filter((c) => c.bookTitle === b) }));
   const first = chapters.filter(match), rest = chapters.filter((c) => !match(c));
   return (

@@ -8,8 +8,10 @@ import FileKeeper from "@/components/FileKeeper";
 import { ThumbGrid } from "@/components/Thumb";
 import { Empty, ErrorBox, PageTitle, Ring, SubjectChip, Tabs } from "@/components/ui";
 import { useTodo } from "@/lib/todo";
+import Lightbox from "@/components/Lightbox";
+import ExamGuard, { enterExam, leaveExam, fullscreenSupported, eventLabel } from "@/components/ExamGuard";
 
-type T = { id: string; subject: string; title: string; test_date: string; test_time: string | null; paper_ready: boolean; syllabus: string; syllabus_files: string[]; marks_obtained: number | null; max_marks: number | null; file_paths: string[] };
+type T = { id: string; subject: string; title: string; test_date: string; test_time: string | null; paper_ready: boolean; syllabus: string; syllabus_files: string[]; remarks: string; marks_obtained: number | null; max_marks: number | null; file_paths: string[] };
 type Paper = { test_id: string; file_paths: string[]; note: string };
 type Ans = { test_id: string; file_paths: string[]; note: string; submitted_at: string };
 
@@ -26,14 +28,20 @@ export default function Tests() {
   const [paperEdit, setPaperEdit] = useState<string | null>(null);
   const [ansEdit, setAnsEdit] = useState<string | null>(null);
   const [keep, setKeep] = useState<string[]>([]);
+  const [examFor, setExamFor] = useState<string | null>(null);   // test whose paper is open in exam mode
+  const [events, setEvents] = useState<Record<string, { event: string; created_at: string }[]>>({});
   const [tick, setTick] = useState(0); // re-check the clock every 20s so "Open" switches on by itself
 
   const load = useCallback(async () => {
-    const [t, p, a] = await Promise.all([
+    const [t, p, a, ev] = await Promise.all([
       supabase.from("tests").select("*").order("test_date", { ascending: false }),
       supabase.from("test_papers").select("*"),
       supabase.from("test_submissions").select("*"),
+      supabase.from("exam_events").select("ref_id, event, created_at").eq("ref_kind", "test").order("created_at"),
     ]);
+    const grouped: Record<string, { event: string; created_at: string }[]> = {};
+    for (const x of ev.data ?? []) (grouped[x.ref_id] ??= []).push({ event: x.event, created_at: x.created_at });
+    setEvents(grouped);
     setTests((t.data ?? []) as T[]);
     setPapers(Object.fromEntries((p.data ?? []).map((x) => [x.test_id, x as Paper])));
     setAnswers(Object.fromEntries((a.data ?? []).map((x) => [x.test_id, x as Ans])));
@@ -79,25 +87,24 @@ export default function Tests() {
     } catch (x) { setErr((x as Error).message); }
     setBusy(null);
   }
-  async function setMarks(id: string, e: React.FormEvent<HTMLFormElement>) {
+  /** Marks + remarks (+ photos with the remarks) in one go. */
+  async function saveReview(t: T, e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const v = new FormData(e.currentTarget).get("marks");
-    await supabase.from("tests").update({ marks_obtained: v === "" ? null : Number(v) }).eq("id", id);
-    load(); todo.refresh();
-  }
-  async function addCheckedPaper(t: T, e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const list = files(new FormData(e.currentTarget), "file");
-    if (!list.length) return;
-    setBusy(t.id + "chk"); setErr("");
+    const f = new FormData(e.currentTarget);
+    setBusy(t.id + "rev"); setErr("");
     try {
-      const paths = await up(list, "tests");
-      const { error } = await supabase.from("tests").update({ file_paths: [...t.file_paths, ...paths] }).eq("id", t.id);
+      const added = await up(files(f, "remark_photos"), "tests");
+      const m = f.get("marks") as string;
+      const { error } = await supabase.from("tests").update({
+        marks_obtained: m === "" ? null : Number(m), remarks: (f.get("remarks") as string) ?? "", file_paths: [...t.file_paths, ...added],
+      }).eq("id", t.id);
       if (error) throw error;
-      load();
+      load(); todo.refresh();
     } catch (x) { setErr((x as Error).message); }
     setBusy(null);
   }
+  async function startExam(t: T) { await enterExam(); setExamFor(t.id); }
+  async function finishExam() { setExamFor(null); await leaveExam(); load(); }
   async function removeChecked(t: T, p: string) {
     if (!confirm("Remove this photo?")) return;
     await supabase.from("tests").update({ file_paths: t.file_paths.filter((x) => x !== p) }).eq("id", t.id);
@@ -178,7 +185,8 @@ export default function Tests() {
               <div className="font-extrabold">✏️ Edit test</div>
               <select name="subject" defaultValue={t.subject} className="field">{SUBJECTS.map((x) => <option key={x}>{x}</option>)}</select>
               <input name="title" required defaultValue={t.title} className="field" />
-              <div className="flex gap-2"><input type="date" name="date" required defaultValue={t.test_date} className="field" /><input type="time" name="time" defaultValue={t.test_time?.slice(0, 5) ?? ""} className="field !w-36" title="Start time" /></div>
+              <label className="block text-sm font-extrabold">📅 Test date <input type="date" name="date" required defaultValue={t.test_date} className="field mt-1 !text-base" /></label>
+              <label className="block text-sm font-extrabold">⏰ Start time <span className="font-semibold text-slate-500">(paper opens then)</span> <input type="time" name="time" defaultValue={t.test_time?.slice(0, 5) ?? ""} className="field mt-1 !text-base" /></label>
               <input name="max" type="number" defaultValue={t.max_marks ?? ""} placeholder="Total marks" className="field" />
               <textarea name="syllabus" defaultValue={t.syllabus} placeholder="Syllabus / chapters" className="field" rows={2} />
               <FileKeeper paths={t.syllabus_files} keep={keep} setKeep={setKeep} label="Syllabus photos" />
@@ -196,6 +204,7 @@ export default function Tests() {
                   <div><div className="font-display font-extrabold text-sm leading-none">{t.marks_obtained}/{t.max_marks}</div><div className="text-[10px] font-bold text-slate-500">{pct}%</div></div>
                 </Ring>
               )}
+              {t.marks_obtained !== null && !t.max_marks && <span className="chip bg-amber-100 text-amber-800 !text-base !px-4 !py-2">🏅 Marks: {t.marks_obtained}</span>}
             </div>
           )}
           {editId !== t.id && t.syllabus_files.length > 0 && (
@@ -231,9 +240,25 @@ export default function Tests() {
           ) : (
             <div className="rounded-2xl bg-sky-50 border border-sky-200 p-3 space-y-2">
               <div className="font-extrabold text-sm">📄 Your test paper</div>
-              {paper ? (<><ThumbGrid paths={paper.file_paths} label="Paper" title={`${t.title} · test paper`} />{paper.note && <p className="text-sm">📝 {paper.note}</p>}<p className="text-xs text-slate-500">Tap to open. Write your answers on paper, then upload photos of your answer sheet below.</p></>)
+              {paper ? (<>
+                {paper.note && <p className="text-sm">📝 {paper.note}</p>}
+                {t.marks_obtained !== null
+                  ? <ThumbGrid paths={paper.file_paths} label="Paper" title={`${t.title} · test paper`} />
+                  : (<>
+                    <button onClick={() => startExam(t)} className="btn btn-primary btn-big">📖 {ans ? "Open test paper again" : "Start test — open paper"}</button>
+                    <p className="text-xs text-slate-500">The paper opens in full screen. Please do not switch apps or tabs, or press back: ma&apos;am will see if you leave. Write your answers on paper, then tap <b>I&apos;m done</b> and upload photos of your answer sheet below.{!fullscreenSupported() && " (Full screen is not available on this phone, but leaving the page is still noted.)"}</p></>)}
+              </>)
                 : <p className="text-sm text-slate-600">Ma&apos;am has not uploaded the paper yet. Please wait. ⏳</p>}
             </div>
+          )}
+
+          {examFor === t.id && paper && (
+            <ExamGuard kind="test" refId={t.id} container={false}>
+              <Lightbox paths={paper.file_paths} title={`${t.title} · test paper`} noOpen finishLabel="✅ I'm done — go upload my answers" onClose={finishExam} />
+            </ExamGuard>
+          )}
+          {(isTeacher || me.role === "parent") && (events[t.id]?.length ?? 0) > 0 && (
+            <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3 text-sm"><b>⚠️ Kashika left the test screen {events[t.id].length} time{events[t.id].length > 1 ? "s" : ""}:</b> {events[t.id].map((e) => `${eventLabel(e.event)} (${new Date(e.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`).join(" · ")}</div>
           )}
 
           {/* ---- Kashika's answer sheet ---- */}
@@ -259,26 +284,26 @@ export default function Tests() {
             </div>
           )}
 
-          {/* ---- marks + checked paper ---- */}
-          {pct === null && isPast && !isTeacher && <p className="text-sm font-bold text-slate-400">Marks not added yet</p>}
+          {/* ---- marks, remarks and photos ---- */}
+          {t.marks_obtained === null && isPast && !isTeacher && <p className="text-sm font-bold text-slate-400">Marks not added yet</p>}
+          {!isTeacher && t.remarks && <div className="rounded-2xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm">👩‍🏫 <b>Ma&apos;am&apos;s remarks:</b> {t.remarks}</div>}
           {t.file_paths.length > 0 && (
-            <div className="space-y-1"><div className="text-xs font-extrabold text-slate-500">✅ Checked paper</div>
-              <ThumbGrid paths={t.file_paths} label="Checked" title={`${t.title} · checked paper`} renderExtra={isTeacher ? (p) => (
+            <div className="space-y-1"><div className="text-xs font-extrabold text-slate-500">✅ Remarks photos &amp; checked paper</div>
+              <ThumbGrid paths={t.file_paths} label="Checked" title={`${t.title} · remarks & checked paper`} renderExtra={isTeacher ? (p) => (
                 <button onClick={() => removeChecked(t, p)} className="absolute -top-2 -right-2 size-7 rounded-full bg-rose-500 text-white text-sm font-extrabold shadow" title="Remove photo">✕</button>) : undefined} />
             </div>
           )}
-          {isTeacher && started && (
-            <div className="space-y-2 border-t border-dashed border-violet-200 pt-3">
-              <form onSubmit={(e) => setMarks(t.id, e)} className="flex items-center gap-2">
+          {isTeacher && (started || ans) && (
+            <form onSubmit={(e) => saveReview(t, e)} className={`space-y-2 rounded-2xl p-3 border ${ans && t.marks_obtained === null ? "bg-amber-50 border-amber-300" : "border-dashed border-violet-200"}`}>
+              <div className="font-extrabold text-sm">{ans && t.marks_obtained === null ? "✍️ Kashika submitted her answer sheet — add her marks" : "🏅 Marks & remarks"}</div>
+              <div className="flex items-center gap-2">
                 <input name="marks" type="number" step="0.5" defaultValue={t.marks_obtained ?? ""} placeholder="Marks" className="field !w-28" />
                 <span className="font-bold">/ {t.max_marks ?? "?"}</span>
-                <button className="btn btn-soft">Save marks</button>
-              </form>
-              <form onSubmit={(e) => addCheckedPaper(t, e)} className="space-y-2">
-                <FileInput name="file" multiple compact label="Add checked paper (photos)" />
-                <button disabled={busy === t.id + "chk"} className="btn btn-soft !py-1.5 text-sm">{busy === t.id + "chk" ? "Uploading…" : "Upload checked paper"}</button>
-              </form>
-            </div>
+              </div>
+              <textarea name="remarks" defaultValue={t.remarks} placeholder="Remarks for Kashika (optional)" className="field" rows={2} />
+              <FileInput name="remark_photos" multiple compact label="Add photos with remarks (checked paper, corrections)" />
+              <button disabled={busy === t.id + "rev"} className="btn btn-primary btn-big">{busy === t.id + "rev" ? "Saving…" : "💾 Save marks & remarks"}</button>
+            </form>
           )}
           {isTeacher && editId !== t.id && (
             <div className="flex gap-2">
@@ -301,9 +326,10 @@ export default function Tests() {
           <form onSubmit={add} className="space-y-2.5 mt-3">
             <select name="subject" className="field">{SUBJECTS.map((s) => <option key={s}>{s}</option>)}</select>
             <input name="title" required placeholder="Test name (e.g. Unit Test 1)" className="field" />
-            <div className="flex gap-2"><input type="date" name="date" required className="field" /><input type="time" name="time" className="field !w-36" title="Start time" /></div>
+            <label className="block text-sm font-extrabold">📅 Test date <input type="date" name="date" required className="field mt-1 !text-base" /></label>
+            <label className="block text-sm font-extrabold">⏰ Start time <span className="font-semibold text-slate-500">(India time)</span> <input type="time" name="time" className="field mt-1 !text-base" /></label>
+            <p className="text-xs text-slate-500 -mt-1">The test paper opens for Kashika at this time. Leave the time empty to open from the start of that day.</p>
             <input name="max" type="number" placeholder="Total marks" className="field" />
-            <p className="text-xs text-slate-500 -mt-1">Start time: the paper becomes openable for Kashika at this time (India time). Leave it empty to open from the start of the day.</p>
             <textarea name="syllabus" placeholder="Syllabus / chapters (you can also add photos below)" className="field" rows={2} />
             <FileInput name="syllabus_photos" multiple compact label="Add syllabus photos / PDF (optional)" />
             <button disabled={busy === "add"} className="btn btn-primary btn-big">{busy === "add" ? "Adding…" : "Add test"}</button>

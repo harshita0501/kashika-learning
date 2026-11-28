@@ -133,7 +133,7 @@ function ZoomStage({ url, onSwipe, onApi }: { url: string; onSwipe: (d: number) 
 }
 
 /** Full-screen viewer for uploaded photos / PDFs: previous / next, zoom, drag, rotate. Stays inside the app (no new tab). */
-export default function Lightbox({ paths, start = 0, title, onClose, urls: direct }: { paths: string[]; start?: number; title?: string; onClose: () => void; urls?: string[] }) {
+export default function Lightbox({ paths, start = 0, title, onClose, urls: direct, finishLabel, noOpen }: { paths: string[]; start?: number; title?: string; onClose: () => void; urls?: string[]; finishLabel?: string; noOpen?: boolean }) {
   const [urls, setUrls] = useState<(string | null)[]>([]);
   const [i, setI] = useState(Math.min(start, paths.length - 1));
   const [api, setApi] = useState<Api | null>(null);
@@ -165,8 +165,8 @@ export default function Lightbox({ paths, start = 0, title, onClose, urls: direc
     <div className="fixed inset-0 z-[70] flex h-dvh w-screen flex-col bg-black/95 select-none">
       <div className="flex items-center gap-2 p-3 text-white">
         <div className="flex-1 min-w-0 font-display font-extrabold truncate">{title ?? "Photo"}{many && <span className="ml-2 text-white/70 text-sm font-bold">{i + 1} / {paths.length}</span>}</div>
-        {url && <a href={url} target="_blank" rel="noreferrer" className="rounded-xl bg-white/15 px-3 py-2 text-sm font-bold">Open ↗</a>}
-        <button onClick={onClose} className="rounded-xl bg-white/15 px-3 py-2 text-sm font-bold">✕ Close</button>
+        {url && !noOpen && <a href={url} target="_blank" rel="noreferrer" className="rounded-xl bg-white/15 px-3 py-2 text-sm font-bold">Open ↗</a>}
+        {!finishLabel && <button onClick={onClose} className="rounded-xl bg-white/15 px-3 py-2 text-sm font-bold">✕ Close</button>}
       </div>
 
       <div className="relative flex-1 min-h-0">
@@ -192,6 +192,7 @@ export default function Lightbox({ paths, start = 0, title, onClose, urls: direc
           </div>
         )}
         {!pdf && <div className="text-[11px] text-white/50 font-semibold">Pinch or double-tap to zoom · drag to move around</div>}
+        {finishLabel && <button onClick={onClose} className="btn btn-green btn-big !max-w-sm">{finishLabel}</button>}
       </div>
     </div>,
     document.body,
